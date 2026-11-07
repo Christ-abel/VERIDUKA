@@ -9,7 +9,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -37,9 +37,12 @@ from schemas import (
     SocialSyncOut,
     VendorCard,
     VendorDetail,
+    WhatsAppConnectIn,
+    WhatsAppConnectOut,
+    WhatsAppWebhookOut,
 )
 from scoring import legally_verified, score_vendor
-from social import comment_to_report, fetch_authorized_instagram
+from social import comment_to_report, fetch_authorized_instagram, first_link, parse_whatsapp_messages, valid_whatsapp_signature
 from thrivewave import (
     HELP_TEXT,
     UNKNOWN_TEXT,
@@ -669,6 +672,84 @@ def sync_social(db: Session = Depends(get_db)):
         vendor_id=vendor.id,
         message=f"Imported {imported} comment{'s' if imported != 1 else ''} from @{username}.",
     )
+
+
+def _require_review_key(review_key: str | None) -> None:
+    expected = os.getenv("REVIEW_API_KEY", "")
+    if expected and review_key != expected:
+        raise HTTPException(status_code=403, detail="A valid review key is required.")
+
+
+@app.post("/api/v1/whatsapp/connect", response_model=WhatsAppConnectOut)
+def connect_whatsapp(
+    payload: WhatsAppConnectIn,
+    db: Session = Depends(get_db),
+    review_key: str | None = Header(default=None, alias="X-Review-Key"),
+):
+    """Record that a shop connected its own WhatsApp Business number. Until then its webhook is ignored."""
+    _require_review_key(review_key)
+    vendor = db.get(Vendor, payload.vendor_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="No vendor with that id.")
+    taken = db.query(Vendor).filter(Vendor.whatsapp_phone_number_id == payload.phone_number_id, Vendor.id != vendor.id).first()
+    if taken is not None:
+        raise HTTPException(status_code=409, detail="That WhatsApp number is already connected to another shop.")
+    vendor.whatsapp_phone_number_id = payload.phone_number_id
+    db.commit()
+    return WhatsAppConnectOut(vendor_id=vendor.id, vendor_name=vendor.name, phone_number_id=payload.phone_number_id)
+
+
+@app.get("/api/v1/whatsapp/webhook")
+def whatsapp_verify(
+    mode: str | None = Query(default=None, alias="hub.mode"),
+    token: str | None = Query(default=None, alias="hub.verify_token"),
+    challenge: str | None = Query(default=None, alias="hub.challenge"),
+):
+    """Meta's one-time handshake when the webhook URL is registered."""
+    expected = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
+    if not expected or mode != "subscribe" or token != expected:
+        raise HTTPException(status_code=403, detail="Webhook verification failed.")
+    return Response(content=challenge or "", media_type="text/plain")
+
+
+@app.post("/api/v1/whatsapp/webhook", response_model=WhatsAppWebhookOut)
+async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+    """Opted-in WhatsApp messages. Only a connected shop's number is accepted; everything else is dropped."""
+    raw = await request.body()
+    if not valid_whatsapp_signature(raw, request.headers.get("x-hub-signature-256")):
+        raise HTTPException(status_code=403, detail="Bad webhook signature.")
+    try:
+        data = json.loads(raw.decode("utf-8") or "{}")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Webhook body is not valid JSON.") from exc
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Webhook JSON must be an object.")
+
+    messages = parse_whatsapp_messages(data)
+    imported = 0
+    seen: set[str] = set()
+    for item in messages:
+        vendor = db.query(Vendor).filter(Vendor.whatsapp_phone_number_id == item["phone_number_id"]).first()
+        if vendor is None:
+            continue
+        external_id = f"wa:{item['external_id']}" if item["external_id"] else None
+        if external_id and (external_id in seen or db.query(Report).filter(Report.external_id == external_id).first()):
+            continue
+        if external_id:
+            seen.add(external_id)
+        db.add(
+            comment_to_report(
+                vendor_id=vendor.id,
+                platform="whatsapp",
+                text=item["text"],
+                author_handle=mask_phone(item["sender"]),
+                permalink=first_link(item["text"]),
+                external_id=external_id,
+            )
+        )
+        imported += 1
+    db.commit()
+    return WhatsAppWebhookOut(received=len(messages), imported=imported, ignored=len(messages) - imported)
 
 
 @app.post("/api/v1/sms/webhook", response_model=SmsOut)

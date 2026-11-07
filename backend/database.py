@@ -71,11 +71,21 @@ def _ensure_report_columns(db: Session) -> None:
     db.commit()
 
 
+def _ensure_vendor_columns(db: Session) -> None:
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+    present = {row[1] for row in db.execute(text("PRAGMA table_info(vendors)")).fetchall()}
+    if "whatsapp_phone_number_id" not in present:
+        db.execute(text("ALTER TABLE vendors ADD COLUMN whatsapp_phone_number_id VARCHAR(40)"))
+        db.commit()
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         _ensure_report_columns(db)
+        _ensure_vendor_columns(db)
         db.execute(text("UPDATE vendors SET about = REPLACE(about, 'Social-only', 'Social only')"))
         db.commit()
         if db.query(Vendor).count() == 0:

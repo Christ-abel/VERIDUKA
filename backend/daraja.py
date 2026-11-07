@@ -1,4 +1,30 @@
-"""Safaricom Daraja merchant-name lookup."""
+"""Match an M-Pesa short code to the business that owns it.
+
+A paybill or till is only a number. The case this check is for: the shop
+presents one name, and the short code is registered to a different company.
+Typing the digits is not proof.
+
+Recheck legal details runs this when both Daraja keys are set:
+
+1. OAuth. The consumer key and secret go to Safaricom as HTTP Basic on
+   /oauth/v1/generate?grant_type=client_credentials. The reply is a bearer
+   token. Sandbox uses sandbox.safaricom.co.ke. Production uses
+   api.safaricom.co.ke.
+2. Name lookup. That token authorizes POST /mpesa/orginfo/v1/query
+   (Query Organization Info) with {"ShortCode": "<paybill>"}. Safaricom
+   returns the business name on that short code as OrganizationName or
+   MerchantName. DARAJA_NAME_LOOKUP_URL can replace the path when an app
+   is enabled for a different route on the same host.
+3. Compare. Both names are reduced to words. Case, punctuation, and a
+   trailing Ltd or Limited are ignored. The remaining words must be the
+   same list, in the same order.
+4. Badge. M-Pesa Verified turns on only when those names agree and the
+   KRA/BRS record is active or registered. A mismatch is stored and the
+   badge turns off. The trust score does not move. The +25 is still only
+   the legal-record bonus.
+
+Empty consumer key and secret skip the call, and the seeded badge stays.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +47,15 @@ class DarajaConfigurationError(DarajaError):
     status_code = 503
 
 
+def _merchant_name(payload: dict) -> str:
+    """Read the short-code name from either response shape Daraja sends."""
+    for field in ("MerchantName", "merchantName", "OrganizationName", "organizationName"):
+        value = payload.get(field)
+        if isinstance(value, str) and value.strip():
+            return " ".join(value.split())
+    return ""
+
+
 def daraja_credentials_configured() -> bool:
     return bool(
         os.getenv("DARAJA_CONSUMER_KEY", "").strip()
@@ -29,6 +64,12 @@ def daraja_credentials_configured() -> bool:
 
 
 def registered_names_match(left: str, right: str) -> bool:
+    """True when two business names are the same entity, ignoring legal suffixes.
+
+    "Nairobi Tech Hub Electronics Ltd." matches "nairobi tech hub electronics limited".
+    An extra word, such as Kenya, does not match.
+    """
+
     def key(value: str) -> tuple[str, ...]:
         words = re.findall(r"[a-z0-9]+", value.casefold())
         while words and words[-1] in {
@@ -59,8 +100,9 @@ class DarajaClient:
     def lookup_paybill_name(self, paybill: str) -> str:
         if not self.consumer_key or not self.consumer_secret:
             raise DarajaConfigurationError("Set both DARAJA_CONSUMER_KEY and DARAJA_CONSUMER_SECRET.")
+        # Query Organization Info is the Daraja product that returns the name on a short code.
         if not self.name_lookup_url:
-            raise DarajaConfigurationError("Set DARAJA_NAME_LOOKUP_URL to the enabled Daraja name-inquiry endpoint.")
+            self.name_lookup_url = "/mpesa/orginfo/v1/query"
         if self.environment == "sandbox":
             base_url = "https://sandbox.safaricom.co.ke"
         elif self.environment == "production":
@@ -84,10 +126,10 @@ class DarajaClient:
                 method="POST",
             )
         )
-        name = payload.get("MerchantName") or payload.get("merchantName")
-        if not isinstance(name, str) or not name.strip():
+        name = _merchant_name(payload)
+        if not name:
             raise DarajaError("Daraja name-inquiry response did not contain a merchant name.")
-        return " ".join(name.split())
+        return name
 
     def _endpoint(self, base_url: str) -> str:
         parsed = urlparse(self.name_lookup_url)

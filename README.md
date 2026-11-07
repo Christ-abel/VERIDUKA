@@ -54,6 +54,20 @@ A positive review counts toward the score when it has a proof link and the class
 
 A pasted M-Pesa confirmation code, such as `QK72H8L9P0` at the start of a Safaricom SMS, is hashed and stored with the report. The first report to carry that code can still move the score. The same code filed again, including on a different shop, stays on file with a written reason and adds nothing. The raw code is not given its own field.
 
+## How an M-Pesa short code is checked
+
+A paybill or till is a number. The name on an Instagram page can be anything. **M-Pesa Verified** means the business name Safaricom has on that short code is the same entity as the KRA or BRS record. It does not add points. The +25 is still only an active KRA PIN or a registered BRS name.
+
+**Recheck legal details** on the legal tab runs the check when both Daraja keys are set:
+
+1. VeriDuka sends the consumer key and secret to Safaricom and receives a short-lived token.
+2. It asks Query Organization Info, `POST /mpesa/orginfo/v1/query`, with `{"ShortCode": "<paybill>"}`. Sandbox uses `sandbox.safaricom.co.ke`. Production uses `api.safaricom.co.ke`.
+3. Safaricom returns the business name registered on that short code.
+4. That name is compared with the KRA/BRS name. Capital letters, punctuation, and a trailing Ltd or Limited are ignored. The remaining words have to match, in order.
+5. The badge stays on only when the names agree and that registry record is active or registered. A different till name is written on the legal tab and the badge turns off.
+
+When both Daraja keys are empty, that call is skipped and the seeded badge stays. Nairobi Tech Hub Electronics keeps M-Pesa Verified in the demo for that reason. The demo paybills are not real Safaricom short codes, so a live lookup of `400200` cannot invent a match.
+
 On a fresh database the three seeded shops land at:
 
 | Shop | Score | Why |
@@ -115,7 +129,7 @@ ThriveWave carries the same check to a handset. The dashboard includes a phone s
 | Instagram, Facebook, and TikTok links | Live. The buyer opens the page. Comments are not imported |
 | Instagram sync | Optional code path only. The dashboard does not call it without a token |
 | BRS and KRA | Local mock of three official records. `KRA_*` and `BRS_*` are reserved for a real client |
-| M-Pesa till name | Seeded badge when Daraja keys are empty. With Daraja configured, a lookup must match the KRA/BRS registered name for the badge to show |
+| M-Pesa till name | Seeded badge when Daraja keys are empty. With keys, Query Organization Info must match the KRA/BRS name or the badge turns off. The score does not move |
 | ThriveWave | Mock dispatch until `THRIVEWAVE_LIVE=true` |
 
 The mock registry includes a decoy company, Savanna Hardware Limited in Mombasa, so a PIN from one business is not stamped onto an unrelated shop.
@@ -144,6 +158,7 @@ VERIDUKA/
 │   ├── schemas.py
 │   ├── scoring.py            # signal-v1
 │   ├── receipts.py           # one M-Pesa confirmation code, one shop
+│   ├── daraja.py             # short-code name vs KRA/BRS name
 │   ├── classifier.py
 │   ├── reading.py            # plain review text, not a score input
 │   ├── social.py             # optional import, unused by the dashboard
@@ -220,7 +235,7 @@ Reporter phones are masked on the dossier (`07****01`). The shop's own phone is 
 
 Copy `.env.example` to `.env`. Empty values keep the built-in mocks. `.env` is gitignored.
 
-The Daraja till-name check uses OAuth and requires the name-inquiry endpoint to be enabled for your Daraja app. Recheck a vendor's legal details from the dossier to query its paybill. A badge is shown only when the returned name matches the official KRA/BRS registered name and that record is active or registered. When both consumer credentials are empty, the seeded M-Pesa badge behavior is unchanged.
+The short-code check is the section above, "How an M-Pesa short code is checked". Put the Daraja consumer key and secret in `.env`, never in this repository. Recheck on the legal tab is what sends the lookup. Query Organization Info has to be enabled on the Daraja app. When both keys are empty, the seeded badge stays.
 
 | Variable | What it unlocks |
 | --- | --- |
@@ -231,8 +246,8 @@ The Daraja till-name check uses OAuth and requires the name-inquiry endpoint to 
 | `META_GRAPH_VERSION` | Graph API version, default `v21.0` |
 | `META_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized this app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Reserved for live registry clients |
-| `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_ENVIRONMENT` | Daraja OAuth credentials and environment (`sandbox` or `production`) |
-| `DARAJA_NAME_LOOKUP_URL` | Enabled Daraja name-inquiry endpoint. VeriDuka sends `POST {"ShortCode":"<paybill>"}` with a bearer token and expects `{"MerchantName":"<registered name>"}` |
+| `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_ENVIRONMENT` | Daraja OAuth. `sandbox` or `production`. Both keys empty keeps the seeded badge |
+| `DARAJA_NAME_LOOKUP_URL` | Optional. Default `/mpesa/orginfo/v1/query` on the Safaricom host. Body `{"ShortCode":"<paybill>"}`. Name from `OrganizationName` or `MerchantName` |
 | `REVIEW_API_KEY` | When set, resolving a report or connecting WhatsApp requires this value in `X-Review-Key` |
 | `WHATSAPP_VERIFY_TOKEN` | Handshake token for a shop's own WhatsApp webhook. Empty disables the handshake |
 | `WHATSAPP_APP_SECRET` | When set, WhatsApp deliveries must carry a valid `X-Hub-Signature-256` |
@@ -241,7 +256,7 @@ The Daraja till-name check uses OAuth and requires the name-inquiry endpoint to 
 
 Issues are the best place to start. Each one is a slice that makes the check harder to fake:
 
-1. [Match an M-Pesa till name to the registered business](https://github.com/Christ-abel/VERIDUKA/issues/1)
+1. [Match an M-Pesa till name to the registered business](https://github.com/Christ-abel/VERIDUKA/issues/1) (done)
 2. [Classify reports and SMS written in Swahili](https://github.com/Christ-abel/VERIDUKA/issues/2)
 3. [Weight reports by reporter reputation](https://github.com/Christ-abel/VERIDUKA/issues/3)
 4. [Reject a reused M-Pesa receipt](https://github.com/Christ-abel/VERIDUKA/issues/4) (done)

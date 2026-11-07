@@ -179,6 +179,11 @@ def profile_links(vendor: Vendor) -> dict[str, ProfileLink]:
 
 
 def badges_for(vendor: Vendor) -> dict:
+    """M-Pesa Verified is a till-name match, not a point on the trust score.
+
+    With no Daraja keys, the seeded flag stands. With keys, the badge stays
+    on only after a lookup stored a till name that matches the KRA/BRS entity.
+    """
     mpesa_verified = bool(vendor.mpesa_verified)
     if daraja_credentials_configured():
         mpesa_verified = bool(
@@ -661,6 +666,8 @@ def verify_legal(payload: LegalIn, db: Session = Depends(get_db)):
             vendor_updated = True
             db.commit()
 
+        # Separate from the +25. This asks Safaricom who owns the short code,
+        # then keeps M-Pesa Verified only when that name is the registered entity.
         if daraja_credentials_configured():
             if not vendor.paybill:
                 vendor.mpesa_till_name = None

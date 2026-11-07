@@ -233,7 +233,9 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
   return (
     <div>
       <p className="text-sm text-ink/70">
-        Registry answers come from the bundled BRS and KRA mock, the stand-in for the official APIs.
+        A paybill is only a number. Recheck asks Safaricom for the business name on that short code
+        and compares it with the KRA or BRS name. M-Pesa Verified stays on only when those names agree.
+        The trust score does not change. With no Daraja keys, the seeded badge is left as it is.
       </p>
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         {rows.map(([label, value]) => (

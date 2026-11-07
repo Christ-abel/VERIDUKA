@@ -69,6 +69,33 @@ class DarajaClientTests(unittest.TestCase):
         self.assertEqual(json.loads(lookup_request.data), {"ShortCode": "400200"})
         self.assertEqual(lookup_timeout, 10)
 
+    def test_empty_lookup_url_uses_query_organization_info(self):
+        requests = []
+
+        def fake_urlopen(request, timeout):
+            requests.append(request)
+            if len(requests) == 1:
+                return FakeResponse({"access_token": "sandbox-token"})
+            return FakeResponse({"OrganizationName": "Nairobi Tech Hub Electronics Limited"})
+
+        with patch.dict(
+            os.environ,
+            {
+                "DARAJA_CONSUMER_KEY": "consumer-key",
+                "DARAJA_CONSUMER_SECRET": "consumer-secret",
+                "DARAJA_ENVIRONMENT": "sandbox",
+                "DARAJA_NAME_LOOKUP_URL": "",
+            },
+        ), patch("daraja.urlopen", side_effect=fake_urlopen):
+            name = DarajaClient().lookup_paybill_name("400200")
+
+        self.assertEqual(name, "Nairobi Tech Hub Electronics Limited")
+        self.assertEqual(
+            requests[1].full_url,
+            "https://sandbox.safaricom.co.ke/mpesa/orginfo/v1/query",
+        )
+        self.assertEqual(json.loads(requests[1].data), {"ShortCode": "400200"})
+
     def test_lookup_url_must_match_configured_safaricom_host(self):
         with patch.dict(
             os.environ,

@@ -32,6 +32,8 @@ class Vendor(Base):
     location: Mapped[str] = mapped_column(String(120), default="Kenya")
     about: Mapped[str] = mapped_column(Text, default="")
     mpesa_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    mpesa_till_name: Mapped[str | None] = mapped_column(String(200))
+    mpesa_name_match: Mapped[bool | None] = mapped_column(Boolean)
     # verified | pending | unverified
     kra_status: Mapped[str] = mapped_column(String(20), default="unverified")
     brs_status: Mapped[str] = mapped_column(String(20), default="unverified")

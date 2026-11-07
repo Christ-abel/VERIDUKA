@@ -126,6 +126,8 @@ class VendorCard(BaseModel):
     kra_status: str
     brs_status: str
     mpesa_verified: bool
+    mpesa_till_name: str | None
+    mpesa_name_match: bool | None
     is_shadow: bool
     match_field: str
     score: int

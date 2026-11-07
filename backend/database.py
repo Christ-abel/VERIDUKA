@@ -83,7 +83,7 @@ def _ensure_report_columns(db: Session) -> None:
 
 
 def _ensure_vendor_columns(db: Session) -> None:
-    """Add public-page and WhatsApp columns on a database created before those fields existed."""
+    """Add vendor columns on a database created before those fields existed."""
     if not DATABASE_URL.startswith("sqlite"):
         return
     rows = db.execute(text("PRAGMA table_info(vendors)")).fetchall()
@@ -94,6 +94,8 @@ def _ensure_vendor_columns(db: Session) -> None:
         "facebook": "ALTER TABLE vendors ADD COLUMN facebook VARCHAR(80)",
         "tiktok": "ALTER TABLE vendors ADD COLUMN tiktok VARCHAR(80)",
         "whatsapp_phone_number_id": "ALTER TABLE vendors ADD COLUMN whatsapp_phone_number_id VARCHAR(40)",
+        "mpesa_till_name": "ALTER TABLE vendors ADD COLUMN mpesa_till_name VARCHAR(200)",
+        "mpesa_name_match": "ALTER TABLE vendors ADD COLUMN mpesa_name_match BOOLEAN",
     }
     for name, statement in statements.items():
         if name not in present:

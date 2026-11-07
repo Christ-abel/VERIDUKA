@@ -30,3 +30,12 @@ export function signed(value) {
   if (value > 0) return `+${value}`;
   return String(value);
 }
+
+export function whatsappUrl(phone, text) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  let msisdn = digits;
+  if (digits.length === 10 && digits.startsWith("0")) msisdn = `254${digits.slice(1)}`;
+  if (digits.length === 9 && digits.startsWith("7")) msisdn = `254${digits}`;
+  if (!msisdn.startsWith("254") || msisdn.length !== 12) return "";
+  return `https://wa.me/${msisdn}?text=${encodeURIComponent(text)}`;
+}

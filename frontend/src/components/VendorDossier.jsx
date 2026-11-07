@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { formatPhone, formatWhen, handleOf, signed, tone } from "../format";
+import { formatPhone, formatWhen, handleOf, signed, tone, whatsappUrl } from "../format";
 import SocialPanel from "./SocialPanel";
 import TrustGauge from "./TrustGauge";
 
@@ -29,15 +29,17 @@ const BANNER_TONE = {
   noise: "border-noise/30 bg-noise/10",
 };
 
-export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
+export default function VendorDossier({ vendor, onBack, onReport, onChanged, onSms }) {
   const [tab, setTab] = useState("legal");
   const [checking, setChecking] = useState(false);
   const [legalMessage, setLegalMessage] = useState("");
+  const [openPart, setOpenPart] = useState("");
   const band = tone(vendor.band);
 
   useEffect(() => {
     setTab("legal");
     setLegalMessage("");
+    setOpenPart("");
   }, [vendor.id]);
 
   async function recheck() {
@@ -60,18 +62,40 @@ export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
   }
 
   const detail = vendor.score_detail;
-  const equation = [
-    `${detail.base} base`,
-    detail.legal_points ? `+${detail.legal_points} legal` : null,
-    detail.positive_points ? `+${detail.positive_points} reviews` : null,
-    detail.scam_points ? `${detail.scam_points} scam` : null,
-    detail.service_points ? `${detail.service_points} service` : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const parts = [
+    { id: "base", label: `${detail.base} base`, text: "Every shop starts at 50, before a registry match or a buyer report." },
+    {
+      id: "legal",
+      label: detail.legal_points ? `+${detail.legal_points} legal` : "0 legal",
+      text: detail.legal_points
+        ? "An active KRA PIN or a registered BRS record adds 25, once."
+        : "There is no active KRA or BRS match, so the legal bonus stays at 0.",
+    },
+    {
+      id: "reviews",
+      label: detail.positive_points ? `+${detail.positive_points} reviews` : "0 reviews",
+      text: "Verified praise adds 5, and the praise total stops at 20.",
+    },
+    {
+      id: "scam",
+      label: detail.scam_points ? `${detail.scam_points} scam` : "0 scam",
+      text: "An unresolved scam removes 20. A scam from the last 30 days counts double.",
+    },
+    {
+      id: "service",
+      label: detail.service_points ? `${detail.service_points} service` : "0 service",
+      text: "A late delivery or poor service removes 5, and a recent one counts double.",
+    },
+  ];
+  const activePart = parts.find((part) => part.id === openPart);
+  const lookup = vendor.paybill || vendor.phone || vendor.name;
+  const chat = whatsappUrl(
+    vendor.phone,
+    `I checked ${vendor.name} on VeriDuka. The score is ${detail.score}. Is paybill ${vendor.paybill || "this shop"} still yours?`,
+  );
 
   return (
-    <article id="results" className="rounded-[28px] border border-line bg-card p-5 shadow-card sm:p-7">
+    <article id="results" className="min-w-0 rounded-[28px] border border-line bg-card p-5 shadow-card sm:p-7">
       <button type="button" onClick={onBack} className="text-sm font-medium text-signal hover:underline">
         All shops
       </button>
@@ -88,6 +112,19 @@ export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
             <Badge on={vendor.badges.kra_active} onLabel="Active KRA PIN" offLabel="KRA PIN inactive" />
             <Badge on={vendor.badges.mpesa_verified} onLabel="M-Pesa Verified" offLabel="M-Pesa not verified" />
           </div>
+          <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
+            {chat && (
+              <a href={chat} target="_blank" rel="noreferrer" className="rounded-full bg-[#128C7E] px-4 py-2 text-sm font-semibold text-white">
+                Ask on WhatsApp
+              </a>
+            )}
+            <button type="button" onClick={() => onSms?.(`VERIFY ${lookup}`)} className="rounded-full border border-ink px-4 py-2 text-sm font-semibold">
+              Check by SMS
+            </button>
+            <button type="button" onClick={() => onSms?.(`COMMENTS ${lookup}`)} className="rounded-full border border-ink px-4 py-2 text-sm font-semibold">
+              Read reviews by SMS
+            </button>
+          </div>
         </div>
       </div>
 
@@ -96,18 +133,34 @@ export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
         <p className="mt-1 text-ink/75">{vendor.about}</p>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-paper px-4 py-3">
-        <p className="font-mono text-sm text-ink/80">
-          {equation} = {detail.score}
-          {detail.raw !== detail.score ? ` (raw ${detail.raw}, clamped)` : ""}
-        </p>
-        <button
-          type="button"
-          onClick={onReport}
-          className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper"
-        >
-          Add a report
-        </button>
+      <div className="mt-4 rounded-2xl bg-paper px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Score parts">
+            {parts.map((part) => (
+              <button
+                key={part.id}
+                type="button"
+                aria-pressed={openPart === part.id}
+                onClick={() => setOpenPart((current) => (current === part.id ? "" : part.id))}
+                className={`rounded-full border px-3 py-1 font-mono text-sm ${
+                  openPart === part.id ? "border-ink bg-ink text-paper" : "border-line bg-card text-ink/80"
+                }`}
+              >
+                {part.label}
+              </button>
+            ))}
+            <span className="self-center font-mono text-sm text-ink/70">= {detail.score}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onReport}
+            className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper"
+          >
+            Add a report
+          </button>
+        </div>
+        {activePart && <p className="mt-3 text-sm leading-relaxed text-ink/75">{activePart.text}</p>}
+        {detail.raw !== detail.score && <p className="mt-2 text-xs text-ink/50">Raw total {detail.raw}, clamped between 0 and 100.</p>}
       </div>
       <p className="mt-3 text-sm text-ink/60">
         Score inputs are the registry and classified buyer reports. SMS repeats this number. Social pages are links, not inputs.

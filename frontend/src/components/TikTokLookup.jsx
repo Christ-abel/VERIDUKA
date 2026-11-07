@@ -29,14 +29,14 @@ export default function TikTokLookup({ onSaved }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
-  async function run(save = false) {
+  async function run() {
     if (!query.trim()) return;
     setBusy(true);
     setError("");
     try {
-      const data = await api.tiktokLookup({ query: query.trim(), save });
+      const data = await api.tiktokLookup({ query: query.trim() });
       setResult(data);
-      if (save) onSaved?.(data);
+      onSaved?.(data, { open: false });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -50,13 +50,13 @@ export default function TikTokLookup({ onSaved }) {
       <h2 className="font-display text-2xl">Check a TikTok shop</h2>
       <p className="mt-1 text-sm leading-relaxed text-ink/70">
         Paste the shop's TikTok link or @handle. We read the public profile and a few recent comments, and classify them.
-        This only reads. Nothing is saved or scored unless you choose to.
+        A shop VeriDuka has not seen is added automatically as an unclaimed TikTok shop, and its owner can claim it when they register.
       </p>
       <form
         className="mt-3 flex flex-col gap-2 sm:flex-row"
         onSubmit={(event) => {
           event.preventDefault();
-          run(false);
+          run();
         }}
       >
         <input
@@ -147,14 +147,15 @@ export default function TikTokLookup({ onSaved }) {
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => run(true)}
-              disabled={busy}
-              className="rounded-full border border-ink px-4 py-1.5 text-sm font-semibold text-ink disabled:opacity-40"
-            >
-              Save shop and comments
-            </button>
+            {result.vendor_id && (
+              <button
+                type="button"
+                onClick={() => onSaved?.(result, { open: true })}
+                className="rounded-full border border-ink px-4 py-1.5 text-sm font-semibold text-ink"
+              >
+                Open the shop
+              </button>
+            )}
             <p className="text-xs text-ink/55">{result.note}</p>
           </div>
         </div>

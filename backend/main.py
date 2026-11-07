@@ -16,7 +16,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ from database import (
     EXACT_FIELDS,
     AmbiguousIdentifier,
     DuplicateShop,
+    SessionLocal,
     create_registered_vendor,
     get_db,
     handle_of,
@@ -57,8 +58,10 @@ from schemas import (
     SocialImportIn,
     SocialImportOut,
     SocialSyncOut,
+    TikTokClaimIn,
     TikTokLookupIn,
     TikTokLookupOut,
+    TikTokMatchOut,
     VendorCard,
     VendorDetail,
     VendorRegisterIn,
@@ -465,7 +468,7 @@ def read_vendor_comments(vendor_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v1/vendors", response_model=VendorDetail, status_code=201)
-def register_vendor(payload: VendorRegisterIn, db: Session = Depends(get_db)):
+def register_vendor(payload: VendorRegisterIn, background: BackgroundTasks, db: Session = Depends(get_db)):
     """A shop registers itself. The score starts at 50 until a registry check or a report."""
     try:
         vendor = create_registered_vendor(
@@ -485,6 +488,9 @@ def register_vendor(payload: VendorRegisterIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail=f"That {label} is already on file.") from exc
     db.commit()
     db.refresh(vendor)
+    handle = tiktok_lookup.parse_handle(payload.tiktok or "")
+    if handle:
+        background.add_task(_tiktok_check_in_background, handle)
     return vendor_detail(db, vendor)
 
 
@@ -830,12 +836,67 @@ def sync_social(db: Session = Depends(get_db)):
     )
 
 
+def _bio_text(profile: dict) -> str:
+    link = f" {profile['bio_link']}" if profile.get("bio_link") else ""
+    return f"{profile['bio']}{link}".strip()[:1000]
+
+
+def _store_tiktok(db: Session, handle: str, result: dict) -> tuple[Vendor, int, bool]:
+    """Find or add the shop behind a TikTok handle and file its comments.
+
+    A handle nobody has registered becomes an unclaimed TikTok shop. The owner
+    can claim it later when they register (see claim_tiktok).
+    """
+    profile = result["profile"]
+    vendor = db.query(Vendor).filter(Vendor.tiktok == handle).order_by(Vendor.is_shadow).first()
+    created = vendor is None
+    if vendor is None:
+        vendor = Vendor(
+            name=(profile["nickname"] or handle)[:160],
+            tiktok=handle,
+            category="TikTok shop",
+            location="Not on a registry",
+            about=_bio_text(profile),
+            is_shadow=True,
+            kra_status="unverified",
+            brs_status="unverified",
+            mpesa_verified=False,
+            created_at=utcnow(),
+        )
+        db.add(vendor)
+        db.flush()
+    saved = 0
+    for comment in result["comments"]:
+        external_id = comment["external_id"]
+        if external_id and db.query(Report).filter(Report.external_id == external_id).first():
+            continue
+        db.add(
+            comment_to_report(
+                vendor_id=vendor.id,
+                platform="tiktok",
+                text=comment["text"],
+                author_handle=comment["author"],
+                permalink=comment["video_url"],
+                external_id=external_id,
+            )
+        )
+        saved += 1
+    db.commit()
+    return vendor, saved, created
+
+
+def _client_key(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return (forwarded.split(",")[0].strip() if forwarded else "") or (request.client.host if request.client else "unknown")
+
+
 @app.post("/api/v1/tiktok/lookup", response_model=TikTokLookupOut)
-def tiktok_lookup_endpoint(payload: TikTokLookupIn, db: Session = Depends(get_db)):
+def tiktok_lookup_endpoint(payload: TikTokLookupIn, request: Request, db: Session = Depends(get_db)):
     """Shop details and a sample of comments for a TikTok shop, each comment classified.
 
-    Read-only unless save is true. Saving opens the shop (if new) and files the
-    comments as TikTok social comments, which follow the usual link rules.
+    A shop VeriDuka has not seen is added automatically as an unclaimed TikTok
+    shop, and its comments are filed under the usual social-comment rules.
+    Send save=false for a read-only look.
     """
     handle = tiktok_lookup.parse_handle(payload.query)
     if handle is None:
@@ -847,6 +908,9 @@ def tiktok_lookup_endpoint(payload: TikTokLookupIn, db: Session = Depends(get_db
             status_code=422,
             detail="Send the shop's TikTok link or @handle. A name only works for a shop already in VeriDuka with its TikTok set.",
         )
+    refused = tiktok_lookup.usage_cap.allow(_client_key(request))
+    if refused:
+        raise HTTPException(status_code=429, detail=refused)
     try:
         result = tiktok_lookup.lookup(handle, payload.videos, payload.comments_per_video)
     except tiktok_lookup.TikTokError as exc:
@@ -856,39 +920,12 @@ def tiktok_lookup_endpoint(payload: TikTokLookupIn, db: Session = Depends(get_db
     saved = 0
     note = "Read only. Nothing was saved or scored."
     if payload.save:
-        profile = result["profile"]
-        if vendor is None:
-            vendor = Vendor(
-                name=profile["nickname"][:160] or handle,
-                tiktok=handle,
-                category="TikTok shop",
-                location="Not on a registry",
-                about=profile["bio"][:500],
-                is_shadow=True,
-                kra_status="unverified",
-                brs_status="unverified",
-                mpesa_verified=False,
-                created_at=utcnow(),
-            )
-            db.add(vendor)
-            db.flush()
-        for comment in result["comments"]:
-            external_id = comment["external_id"]
-            if external_id and db.query(Report).filter(Report.external_id == external_id).first():
-                continue
-            db.add(
-                comment_to_report(
-                    vendor_id=vendor.id,
-                    platform="tiktok",
-                    text=comment["text"],
-                    author_handle=comment["author"],
-                    permalink=comment["video_url"],
-                    external_id=external_id,
-                )
-            )
-            saved += 1
-        db.commit()
-        note = f"Saved {saved} new comment{'s' if saved != 1 else ''} to {vendor.name}."
+        vendor, saved, created = _store_tiktok(db, handle, result)
+        note = (
+            f"Added {vendor.name} to VeriDuka as an unclaimed TikTok shop. Saved {saved} comment{'s' if saved != 1 else ''}."
+            if created
+            else f"Saved {saved} new comment{'s' if saved != 1 else ''} to {vendor.name}."
+        )
     return TikTokLookupOut(
         handle=handle,
         profile=result["profile"],
@@ -900,6 +937,83 @@ def tiktok_lookup_endpoint(payload: TikTokLookupIn, db: Session = Depends(get_db
         saved=saved,
         note=note,
     )
+
+
+def _tiktok_check_in_background(handle: str) -> None:
+    """The TikTok check for a newly registered shop. Runs after the response so signing up stays quick."""
+    if tiktok_lookup.usage_cap.allow("registration") is not None:
+        return
+    session = SessionLocal()
+    try:
+        result = tiktok_lookup.lookup(handle, 3, 5)
+        _store_tiktok(session, handle, result)
+    except Exception as exc:  # a failed check must never break registration
+        logger.warning("tiktok check for @%s failed: %s", handle, exc)
+    finally:
+        session.close()
+
+
+def _digits(value: str | None) -> str:
+    return re.sub(r"\D", "", value or "")
+
+
+def _bio_proves(vendor: Vendor, claimed: Vendor) -> bool:
+    """The TikTok bio carries the registering shop's phone or paybill, so the same person controls both."""
+    bio = _digits(claimed.about)
+    proofs = []
+    if vendor.phone and len(_digits(vendor.phone)) >= 9:
+        proofs.append(_digits(vendor.phone)[-9:])
+    if vendor.paybill and len(_digits(vendor.paybill)) >= 5:
+        proofs.append(_digits(vendor.paybill))
+    return any(proof in bio for proof in proofs)
+
+
+@app.get("/api/v1/vendors/{vendor_id}/tiktok-matches", response_model=list[TikTokMatchOut])
+def tiktok_matches(vendor_id: int, db: Session = Depends(get_db)):
+    """Unclaimed TikTok shops that look like this registered shop: the same handle, or a similar name."""
+    vendor = db.get(Vendor, vendor_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="No vendor with that id.")
+    handle = handle_of(vendor.tiktok)
+    out = []
+    for other in db.query(Vendor).filter(Vendor.is_shadow.is_(True), Vendor.category == "TikTok shop", Vendor.id != vendor.id).all():
+        if not other.tiktok:
+            continue
+        same = bool(handle) and other.tiktok.lstrip("@").lower() == handle
+        if same or names_match(vendor.name, other.name) or names_match(vendor.name, other.tiktok.replace("_", " ").replace(".", " ")):
+            count = db.query(Report).filter(Report.vendor_id == other.id).count()
+            out.append(TikTokMatchOut(id=other.id, name=other.name, tiktok=other.tiktok, about=other.about[:200], comments=count, same_handle=same))
+    out.sort(key=lambda item: not item.same_handle)
+    return out[:5]
+
+
+@app.post("/api/v1/vendors/{vendor_id}/claim-tiktok", response_model=VendorDetail)
+def claim_tiktok(vendor_id: int, payload: TikTokClaimIn, db: Session = Depends(get_db)):
+    """Connect a registered shop to the TikTok shop it owns. Its comments move over.
+
+    The claim works only when the TikTok bio shows the shop's phone number or
+    paybill, so one person cannot take over another shop's TikTok history.
+    """
+    vendor = db.get(Vendor, vendor_id)
+    claimed = db.get(Vendor, payload.tiktok_vendor_id)
+    if vendor is None or claimed is None:
+        raise HTTPException(status_code=404, detail="Shop not found.")
+    if vendor.is_shadow or not claimed.is_shadow or claimed.category != "TikTok shop" or not claimed.tiktok:
+        raise HTTPException(status_code=409, detail="That TikTok shop cannot be claimed.")
+    if not _bio_proves(vendor, claimed):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Put your shop's phone number or paybill in the @{claimed.tiktok} TikTok bio, "
+                "then connect again so we know it is yours."
+            ),
+        )
+    db.query(Report).filter(Report.vendor_id == claimed.id).update({Report.vendor_id: vendor.id})
+    vendor.tiktok = claimed.tiktok
+    db.delete(claimed)
+    db.commit()
+    db.refresh(vendor)
+    return vendor_detail(db, vendor)
 
 
 def _require_review_key(review_key: str | None) -> None:

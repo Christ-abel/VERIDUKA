@@ -419,7 +419,7 @@ class TikTokLookupIn(BaseModel):
     query: str = Field(min_length=2, max_length=200, description="A TikTok link, @handle, or the name of a shop already in VeriDuka.")
     videos: int = Field(default=3, ge=1, le=5)
     comments_per_video: int = Field(default=5, ge=1, le=10)
-    save: bool = Field(default=False, description="Also save the shop and its comments. Off by default: a lookup only reads.")
+    save: bool = Field(default=True, description="Add the shop to VeriDuka if it is new, and file its comments. Set false for a read-only look.")
 
 
 class TikTokLookupOut(BaseModel):
@@ -432,3 +432,16 @@ class TikTokLookupOut(BaseModel):
     vendor_id: int | None = None
     saved: int = 0
     note: str = ""
+
+
+class TikTokMatchOut(BaseModel):
+    id: int
+    name: str
+    tiktok: str
+    about: str
+    comments: int
+    same_handle: bool
+
+
+class TikTokClaimIn(BaseModel):
+    tiktok_vendor_id: int

@@ -230,9 +230,9 @@ export default function App() {
           </div>
           {!vendor && !comparing && (
             <TikTokLookup
-              onSaved={async (data) => {
+              onSaved={async (data, { open }) => {
                 await loadDirectory(query);
-                if (data.vendor_id) await openVendor(data.vendor_id);
+                if (open && data.vendor_id) await openVendor(data.vendor_id);
               }}
             />
           )}

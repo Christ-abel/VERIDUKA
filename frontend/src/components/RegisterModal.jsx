@@ -19,6 +19,8 @@ const EMPTY = {
 
 export default function RegisterModal({ onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY);
+  const [created, setCreated] = useState(null);
+  const [matches, setMatches] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -42,12 +44,75 @@ export default function RegisterModal({ onClose, onCreated }) {
         category: form.category.trim() || "General",
         about: form.about.trim(),
       });
-      onCreated(created);
+      const found = await api.tiktokMatches(created.id).catch(() => []);
+      if (found.length) {
+        setCreated(created);
+        setMatches(found);
+      } else {
+        onCreated(created);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function connect(match) {
+    setBusy(true);
+    setError("");
+    try {
+      const claimed = await api.claimTiktok(created.id, match.id);
+      onCreated(claimed);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (created) {
+    return (
+      <div className="fixed inset-0 z-30 flex items-end justify-center bg-ink/40 p-4 sm:items-center">
+        <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[28px] bg-card p-5 shadow-card sm:p-7">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">Shop registered</p>
+          <h2 className="mt-1 font-display text-3xl">Is one of these your TikTok?</h2>
+          <p className="mt-3 text-sm leading-relaxed text-ink/70">
+            Buyers have already looked up these TikTok shops. Connect yours and its comments move onto your page. To prove it is
+            yours, your shop's phone number or paybill must be in that TikTok bio.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {matches.map((match) => (
+              <li key={match.id} className="rounded-2xl border border-line px-4 py-3">
+                <p className="font-semibold text-ink">
+                  {match.name} <span className="font-normal text-ink/55">@{match.tiktok}</span>
+                </p>
+                {match.about && <p className="mt-1 text-sm text-ink/70">{match.about}</p>}
+                <p className="mt-1 text-xs text-ink/50">
+                  {match.comments} comment{match.comments === 1 ? "" : "s"} on file{match.same_handle ? ", same handle you entered" : ""}
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => connect(match)}
+                  className="mt-2 rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-paper disabled:opacity-60"
+                >
+                  {busy ? "Connecting…" : "This is mine"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {error && (
+            <p role="alert" className="mt-3 rounded-xl bg-[#f8e4df] px-3 py-2 text-sm text-noise">
+              {error}
+            </p>
+          )}
+          <button type="button" onClick={() => onCreated(created)} className="mt-4 text-sm text-ink/60 underline">
+            None of these are mine
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -63,7 +128,7 @@ export default function RegisterModal({ onClose, onCreated }) {
           </button>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-ink/70">
-          This adds the shop to the directory at a score of 50. A KRA or BRS match is a separate check. Instagram, Facebook, and TikTok handles become links. They are not pulled in as comments.
+          This adds the shop to the directory at a score of 50. A KRA or BRS match is a separate check. If you add a TikTok handle we also check it for comments, and we will show any TikTok shop that looks like yours so you can connect it.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Field label="Shop name" value={form.name} onChange={(value) => setField("name", value)} required />

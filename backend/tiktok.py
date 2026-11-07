@@ -228,3 +228,37 @@ def lookup(handle: str, videos: int = 3, comments_per_video: int = 5) -> dict:
         "summary": summarize(comments),
         "ai": {"model": review["model"], "overall": review["overall"]} if review else None,
     }
+
+
+class UsageCap:
+    """Stop a public site from spending the Apify credit.
+
+    Counts live lookups per client per hour and overall per day. It lives in
+    memory, so a restart resets it, which is fine for a spending guard.
+    """
+
+    def __init__(self) -> None:
+        self.per_client: dict[str, list[float]] = {}
+        self.day = ""
+        self.day_count = 0
+
+    def allow(self, client: str, now: float | None = None) -> str | None:
+        """None when the lookup may run, otherwise the reason it may not."""
+        now = time.time() if now is None else now
+        today = time.strftime("%Y-%m-%d", time.gmtime(now))
+        if today != self.day:
+            self.day, self.day_count = today, 0
+        daily = int(os.getenv("TIKTOK_DAILY_LIMIT", "60") or 60)
+        hourly = int(os.getenv("TIKTOK_HOURLY_PER_CLIENT", "6") or 6)
+        recent = [stamp for stamp in self.per_client.get(client, []) if now - stamp < 3600]
+        if self.day_count >= daily:
+            return "TikTok checks are at their limit for today. Try again tomorrow."
+        if len(recent) >= hourly:
+            return "That is a lot of TikTok checks. Try again in a few minutes."
+        recent.append(now)
+        self.per_client[client] = recent
+        self.day_count += 1
+        return None
+
+
+usage_cap = UsageCap()

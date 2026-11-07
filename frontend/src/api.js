@@ -32,6 +32,9 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  tiktokMatches: (vendorId) => request(`/api/v1/vendors/${vendorId}/tiktok-matches`),
+  claimTiktok: (vendorId, tiktokVendorId) =>
+    request(`/api/v1/vendors/${vendorId}/claim-tiktok`, { method: "POST", body: JSON.stringify({ tiktok_vendor_id: tiktokVendorId }) }),
   tiktokLookup: (body) => request("/api/v1/tiktok/lookup", { method: "POST", body: JSON.stringify(body) }),
   search: (query) => request(`/api/v1/search?query=${encodeURIComponent(query)}`),
   vendor: (id) => request(`/api/v1/vendor/${id}`),

@@ -6,7 +6,14 @@ import unittest
 from datetime import datetime
 
 from reading import reading_lines
-from thrivewave import HELP_TEXT, parse_sms_command, render_comment_sms, render_verify_sms
+from thrivewave import (
+    HELP_TEXT,
+    SWAHILI_HELP_TEXT,
+    is_swahili_sms,
+    parse_sms_command,
+    render_comment_sms,
+    render_verify_sms,
+)
 
 
 class Reply:
@@ -33,8 +40,26 @@ class SmsTests(unittest.TestCase):
         self.assertLessEqual(len(verify), 160)
         self.assertIn("Text COMMENTS.", verify)
 
+    def test_swahili_help_and_verify_replies_fit_in_one_sms(self):
+        self.assertEqual(parse_sms_command("HELP tafadhali"), ("HELP", None))
+        self.assertEqual(parse_sms_command("nisaidie"), ("HELP", None))
+        self.assertTrue(is_swahili_sms("VERIFY 400200 tafadhali"))
+        self.assertLessEqual(len(SWAHILI_HELP_TEXT), 160)
+        verify = render_verify_sms(
+            "Duka la Teknolojia la Nairobi lenye Jina Refu Sana",
+            95,
+            "VERIFIED_SIGNAL",
+            "verified",
+            has_comments=True,
+            swahili=True,
+        )
+        self.assertLessEqual(len(verify), 160)
+        self.assertIn("IMETHIBITISHWA", verify)
+        self.assertIn("Tuma COMMENTS.", verify)
+
     def test_commands(self):
         self.assertEqual(parse_sms_command("COMMENTS 400200"), ("COMMENTS", "400200"))
+        self.assertEqual(parse_sms_command("VERIFY 400200 tafadhali"), ("VERIFY", "400200"))
         self.assertEqual(parse_sms_command("next"), ("NEXT", None))
         self.assertEqual(parse_sms_command("REGISTER Kayole Greens, 0711222333, 556677")[0], "REGISTER")
 

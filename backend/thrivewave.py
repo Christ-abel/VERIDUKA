@@ -21,8 +21,43 @@ HELP_TEXT = (
     "VeriDuka: VERIFY paybill checks a shop. COMMENTS paybill reads reviews. "
     "NEXT for the next one. REGISTER Name, 07..., paybill."
 )
+SWAHILI_HELP_TEXT = (
+    "VeriDuka: VERIFY paybill kuthibitisha duka. COMMENTS paybill kusoma maoni. "
+    "NEXT maoni yanayofuata. REGISTER jina, simu, paybill."
+)
 UNKNOWN_TEXT = "VeriDuka: Send HELP, VERIFY 400200, COMMENTS 400200, or NEXT."
 REGISTER_USAGE = "VeriDuka: REGISTER Name, 07..., paybill. Example: REGISTER Kayole Greens, 0711222333, 556677"
+
+SWAHILI_MARKERS = (
+    "tafadhali",
+    "asante",
+    "msaada",
+    "nisaidie",
+    "naomba",
+    "nime",
+    "nilituma",
+    "nililipia",
+    "pesa",
+    "mzigo",
+    "bidhaa",
+    "duka",
+    "imefika",
+    "haijafika",
+    "imechelewa",
+    "sijapokea",
+    "sijapata",
+    "ameniblock",
+    "alichukua",
+    "huduma",
+    "nzuri",
+    "mbaya",
+    "bei",
+)
+
+
+def is_swahili_sms(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(re.search(rf"\b{re.escape(marker)}\b", lowered) for marker in SWAHILI_MARKERS)
 
 
 @dataclass
@@ -101,7 +136,7 @@ def parse_sms_command(text: str) -> tuple[str, str | None]:
     cleaned = " ".join((text or "").strip().split())
     if not cleaned:
         return "EMPTY", None
-    if re.fullmatch(r"help", cleaned, re.IGNORECASE):
+    if re.fullmatch(r"(?:help(?:\s+tafadhali)?|msaada|nisaidie|naomba msaada)", cleaned, re.IGNORECASE):
         return "HELP", None
     if re.fullmatch(r"next|more", cleaned, re.IGNORECASE):
         return "NEXT", None
@@ -112,11 +147,43 @@ def parse_sms_command(text: str) -> tuple[str, str | None]:
     ):
         match = re.fullmatch(pattern, cleaned, re.IGNORECASE)
         if match:
-            return name, match.group(1).strip()
+            argument = match.group(1).strip()
+            if name == "VERIFY":
+                argument = re.sub(r"[, ]+\s*(?:tafadhali|asante)[.!?]*$", "", argument, flags=re.IGNORECASE)
+            return name, argument
     return "UNKNOWN", cleaned
 
 
-def render_verify_sms(name: str, score: int, band: str, legal_state: str, has_comments: bool = False) -> str:
+def render_verify_sms(
+    name: str,
+    score: int,
+    band: str,
+    legal_state: str,
+    has_comments: bool = False,
+    swahili: bool = False,
+) -> str:
+    if swahili:
+        advice = {
+            "VERIFIED_SIGNAL": "Ni salama kulipa.",
+            "MODERATE_RISK": "Lipa bidhaa ikifika.",
+            "HIGH_NOISE": "USILIPIE mapema.",
+        }.get(band, "Kagua till kabla ya kulipa.")
+        label = {
+            "VERIFIED_SIGNAL": "IMETHIBITISHWA",
+            "MODERATE_RISK": "HATARI YA KATI",
+            "HIGH_NOISE": "TAHADHARI YA UTAPELI",
+        }.get(band, band)
+        legal_bit = {
+            "verified": "KRA/BRS imelingana.",
+            "pending": "BRS inasubiriwa.",
+        }.get(legal_state, "Hakuna ulinganifu wa KRA/BRS.")
+        extra = " Tuma COMMENTS." if has_comments else ""
+        suffix = f" yupo kwenye rekodi. {score}% {label}. {legal_bit} {advice}{extra}"
+        prefix = "VeriDuka: "
+        room = 160 - len(prefix) - len(suffix)
+        shown = name if len(name) <= room else (name[: max(0, room - 3)].rstrip() + "...")
+        return f"{prefix}{shown}{suffix}"[:160]
+
     advice = {
         "VERIFIED_SIGNAL": "Safe to pay.",
         "MODERATE_RISK": "Use pay on delivery.",

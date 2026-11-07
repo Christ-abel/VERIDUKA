@@ -71,7 +71,9 @@ from thrivewave import (
     HELP_TEXT,
     REGISTER_USAGE,
     UNKNOWN_TEXT,
+    SWAHILI_HELP_TEXT,
     ThriveWaveClient,
+    is_swahili_sms,
     normalize_msisdn,
     parse_sms_command,
     render_comment_sms,
@@ -907,7 +909,7 @@ async def sms_webhook(request: Request, db: Session = Depends(get_db)):
     band = None
 
     if command in {"HELP", "EMPTY"}:
-        reply = HELP_TEXT
+        reply = SWAHILI_HELP_TEXT if is_swahili_sms(text) else HELP_TEXT
     elif command == "UNKNOWN":
         reply = UNKNOWN_TEXT
     elif command == "REGISTER":
@@ -936,6 +938,7 @@ async def sms_webhook(request: Request, db: Session = Depends(get_db)):
                 score["band"],
                 legal_state(vendor),
                 has_comments=bool(reading_lines(reports)),
+                swahili=is_swahili_sms(text),
             )
             vendor_id = vendor.id
             score_value = score["score"]

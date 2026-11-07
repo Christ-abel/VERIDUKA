@@ -22,6 +22,16 @@ SCAM_PHRASES = (
     "this is a scam",
     "nothing was delivered",
     "wrong till",
+    "ameniblock",
+    "aliniblock",
+    "wameniblock",
+    "ni tapeli",
+    "amekula pesa zangu",
+    "alichukua pesa zangu",
+    "hakutuma bidhaa",
+    "mzigo haukuwasili",
+    "amepotea na pesa",
+    "amezima simu",
 )
 
 DELAY_PHRASES = (
@@ -33,6 +43,15 @@ DELAY_PHRASES = (
     "days late",
     "late delivery",
     "never came",
+    "bado nasubiri",
+    "bado sijapokea",
+    "haijafika",
+    "imechelewa kufika",
+    "delivery imechelewa",
+    "sijapata mzigo",
+    "mzigo bado",
+    "rider ako njiani",
+    "imechukua siku",
 )
 
 SERVICE_PHRASES = (
@@ -44,6 +63,15 @@ SERVICE_PHRASES = (
     "ignored my calls",
     "refused a refund",
     "broken on arrival",
+    "huduma mbaya",
+    "ubora mbaya",
+    "bidhaa imeharibika",
+    "amenitumia tofauti",
+    "hawajibu simu",
+    "hanijibu",
+    "alikuwa mkali",
+    "walikataa kurejesha pesa",
+    "bei ilikuwa tofauti",
 )
 
 POSITIVE_PHRASES = (
@@ -59,6 +87,26 @@ POSITIVE_PHRASES = (
     "same afternoon",
     "thank you",
     "arrived the next day",
+    "nitanunua tena",
+    "nawapendekeza",
+    "huduma nzuri",
+    "bei poa",
+    "imefika haraka",
+    "imefungwa vizuri",
+    "bidhaa halisi",
+    "asante sana",
+    "mzigo umefika",
+    "nitawatumia tena",
+)
+
+SPAM_PHRASES = (
+    "bonyeza hapa",
+    "umeshinda zawadi",
+    "pata airtime bure",
+    "shinda airtime",
+    "tuma kwa whatsapp",
+    "link ya zawadi",
+    "jibu ndio ushinde",
 )
 
 CATEGORY_LABELS = {
@@ -115,7 +163,11 @@ def _caps_ratio(text: str) -> float:
 
 def _has_narrative(text: str) -> bool:
     channel = re.search(r"\b(paybill|m-?pesa|mpesa|till|whatsapp|instagram|rider|courier)\b", text)
-    outcome = re.search(r"\b(blocked|delivered|waiting|arrived|refund|delayed|late)\b", text)
+    outcome = re.search(
+        r"\b(blocked|delivered|waiting|arrived|refund|delayed|late|haijafika|"
+        r"sijapokea|sijapata|imechelewa|ameniblock|aliniblock|amekula|alichukua)\b",
+        text,
+    )
     amount = re.search(r"\b\d{3,6}\b", text)
     return bool(channel and outcome) or bool(amount and outcome)
 
@@ -145,6 +197,7 @@ def classify_report(text: str, claimed_type: str | None = None) -> Classificatio
     delay = _hits(lower, DELAY_PHRASES)
     service = _hits(lower, SERVICE_PHRASES)
     positive = _hits(lower, POSITIVE_PHRASES)
+    spam = _hits(lower, SPAM_PHRASES)
     scores = {
         "SCAM": len(scam),
         "DELAYED_DELIVERY": len(delay),
@@ -161,6 +214,8 @@ def classify_report(text: str, claimed_type: str | None = None) -> Classificatio
         reasons.append(f"Positive signal: “{phrase}”.")
 
     lure = bool(re.search(r"bit\.ly|tinyurl|free airtime|click here|you won|whatsapp this link", lower))
+    if spam:
+        reasons.append(f"Spam signal: “{spam[0]}”.")
     stuffing = bool(re.search(r"(?:scam[\s!.,]*){3,}", lower))
     extortion = bool(re.search(r"pay me|i will delete|i'll delete|remove this review|compensate me", lower))
     narrative = _has_narrative(lower)
@@ -183,13 +238,16 @@ def classify_report(text: str, claimed_type: str | None = None) -> Classificatio
     priority = ("SCAM", "DELAYED_DELIVERY", "BAD_SERVICE", "POSITIVE")
     best = max(priority, key=lambda key: scores[key])
     best_score = scores[best]
-    hard_spam = lure or stuffing or extortion or ((too_short or shouting) and not narrative)
+    hard_spam = lure or bool(spam) or stuffing or extortion or ((too_short or shouting) and not narrative)
     strong_real_complaint = narrative and best_score >= 2 and best != "POSITIVE"
 
     if hard_spam and not strong_real_complaint:
         category = "SPAM"
         is_false = True
-        confidence = min(0.96, 0.62 + 0.08 * sum(1 for flag in (lure, stuffing, extortion, too_short, shouting) if flag))
+        confidence = min(
+            0.96,
+            0.62 + 0.08 * sum(1 for flag in (lure, bool(spam), stuffing, extortion, too_short, shouting) if flag),
+        )
     elif best_score == 0:
         category = CLAIMED_TO_AI.get((claimed_type or "").upper(), "BAD_SERVICE")
         is_false = too_short and not narrative

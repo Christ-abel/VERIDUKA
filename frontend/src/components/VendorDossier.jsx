@@ -136,7 +136,11 @@ export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
         {tab === "legal" && (
           <LegalPanel vendor={vendor} checking={checking} message={legalMessage} onRecheck={recheck} />
         )}
-        {tab === "reports" && <ReportList reports={vendor.reports.filter((item) => item.source !== "social")} />}
+        {tab === "reports" && <ReportList
+            reports={vendor.reports.filter((item) => item.source !== "social")}
+            shopName={vendor.name}
+            onChanged={onChanged}
+          />}
         {tab === "social" && <SocialPanel vendor={vendor} onChanged={onChanged} />}
         {tab === "service" && <ServicePanel rating={detail.service_rating} />}
       </div>
@@ -207,7 +211,96 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
   );
 }
 
-function ReportList({ reports }) {
+function ReplyBox({ report, shopName, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [author, setAuthor] = useState(shopName);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await api.reply(report.id, { text, author });
+      setText("");
+      setOpen(false);
+      onChanged?.();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-2 text-sm text-signal">
+        Reply publicly
+      </button>
+    );
+  }
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-2">
+      <input
+        value={author}
+        onChange={(event) => setAuthor(event.target.value)}
+        aria-label="Replying as"
+        className="w-full rounded-xl border border-line px-3 py-2 text-sm"
+      />
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        aria-label="Public reply"
+        rows={3}
+        maxLength={1000}
+        placeholder="Write your side. A reply does not change the score."
+        className="w-full rounded-xl border border-line px-3 py-2 text-sm"
+      />
+      {error && <p className="text-xs text-noise">{error}</p>}
+      <div className="flex gap-3">
+        <button type="submit" disabled={busy} className="text-sm font-medium text-signal disabled:opacity-50">
+          {busy ? "Posting..." : "Post reply"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-sm text-ink/55">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ResolveButton({ report, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function resolve() {
+    const reviewer = window.prompt("Reviewer name. Resolving stops this scam report from costing points.");
+    if (!reviewer) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.resolve(report.id, { reviewer });
+      onChanged?.();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span>
+      <button type="button" onClick={resolve} disabled={busy} className="ml-4 text-sm text-ink/60 underline disabled:opacity-50">
+        {busy ? "Saving..." : "Mark resolved (review)"}
+      </button>
+      {error && <span className="ml-2 text-xs text-noise">{error}</span>}
+    </span>
+  );
+}
+
+function ReportList({ reports, shopName, onChanged }) {
   if (!reports.length) {
     return <p className="text-sm text-ink/70">No buyer reports yet. The score is the 50 base plus any legal bonus.</p>;
   }
@@ -239,6 +332,24 @@ function ReportList({ reports }) {
               View proof
             </a>
           )}
+          {report.resolved && (
+            <p className="mt-2 text-xs font-medium text-signal">
+              Resolved{report.resolved_by ? ` by ${report.resolved_by}` : ""}
+              {report.resolved_at ? `, ${formatWhen(report.resolved_at)}` : ""}
+            </p>
+          )}
+          {report.replies?.map((reply) => (
+            <div key={reply.id} className="mt-3 rounded-xl bg-ink/5 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-ink/45">
+                Reply from {reply.author}, {formatWhen(reply.created_at)}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-ink/85">{reply.text}</p>
+            </div>
+          ))}
+          <div>
+            <ReplyBox report={report} shopName={shopName} onChanged={onChanged} />
+            {report.ai_category === "SCAM" && !report.resolved && <ResolveButton report={report} onChanged={onChanged} />}
+          </div>
         </li>
       ))}
     </ul>

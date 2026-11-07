@@ -15,6 +15,8 @@ const EMPTY = {
   location: "",
   category: "",
   about: "",
+  kra_pin: "",
+  brs_number: "",
 };
 
 export default function RegisterModal({ onClose, onCreated }) {
@@ -43,6 +45,8 @@ export default function RegisterModal({ onClose, onCreated }) {
         location: form.location.trim() || "Kenya",
         category: form.category.trim() || "General",
         about: form.about.trim(),
+        kra_pin: form.kra_pin.trim() || null,
+        brs_number: form.brs_number.trim() || null,
       });
       const found = await api.tiktokMatches(created.id).catch(() => []);
       if (found.length) {
@@ -128,12 +132,14 @@ export default function RegisterModal({ onClose, onCreated }) {
           </button>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-ink/70">
-          This adds the shop to the directory at a score of 50. A KRA or BRS match is a separate check. If you add a TikTok handle we also check it for comments, and we will show any TikTok shop that looks like yours so you can connect it.
+          Add the KRA PIN and BRS number if you have them. When the shop name matches that registry record, the score starts at 75. A number we do not have on file is saved and the score stays 50. If you add a TikTok handle we also check it for comments, and we will show any TikTok shop that looks like yours so you can connect it.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Field label="Shop name" value={form.name} onChange={(value) => setField("name", value)} required />
           <Field label="Phone" value={form.phone} onChange={(value) => setField("phone", value)} placeholder="0712345678" required />
           <Field label="Paybill" value={form.paybill} onChange={(value) => setField("paybill", value)} placeholder="400200" />
+          <Field label="KRA PIN" value={form.kra_pin} onChange={(value) => setField("kra_pin", value)} placeholder="A123456789Z" />
+          <Field label="BRS number" value={form.brs_number} onChange={(value) => setField("brs_number", value)} placeholder="PVT-9X2K41" />
           <Field label="Location" value={form.location} onChange={(value) => setField("location", value)} placeholder="Kayole, Nairobi" />
           <Field label="Instagram" value={form.instagram} onChange={(value) => setField("instagram", value)} placeholder="@yourshop" />
           <Field label="Facebook page" value={form.facebook} onChange={(value) => setField("facebook", value)} />

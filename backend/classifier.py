@@ -1,8 +1,14 @@
 """Pattern detection for unstructured buyer reports.
 
-This is the on-box classifier the API runs for every report. It looks for a
-transaction narrative (channel + outcome), scores category phrases, and
-separates spam or thin accusations from reports that describe a real order.
+Cursor wrote this detector for the Zinduathon brief ("Cursor AI powered"
+pattern detection). The API runs it on the server for every report. It does
+not call Cursor, and it does not call another model, so the same text always
+gets the same label.
+
+It looks for a transaction narrative (channel + outcome), scores category
+phrases in English and Swahili, and separates spam or thin accusations from
+reports that describe a real order. Categories are SCAM, DELAYED_DELIVERY,
+BAD_SERVICE, POSITIVE, and SPAM.
 
 Swap `classify_report` for a hosted model later. The rest of the app only
 depends on the Classification shape.

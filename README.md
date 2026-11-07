@@ -15,6 +15,23 @@ VeriDuka treats those as noise and signal:
 - **Signal** is a matching legal record plus reviews that include a public proof link.
 - **Noise** is spam, a comment with no post link, or a burst of praise that has already hit the cap.
 
+## How this matches the brief
+
+The Zinduathon brief asks for three partner pieces, one score, and a dashboard. Each one is a file a reviewer can open.
+
+| Brief | What the code does | Where |
+| --- | --- | --- |
+| Docker on RumptyCloud | One image builds the React app, then serves that app and the API on port 8000. The database is `sqlite:////data/veriduka.db`. Startup adds the judge shops if they are missing. | `Dockerfile`, `docker-compose.yml` |
+| ThriveWave SMS | Inbound text hits `POST /api/v1/sms/webhook`. `VERIFY`, `COMMENTS`, `NEXT`, `REGISTER`, and `HELP` all use the same score as the website. A live reply is sent by ThriveVas when `THRIVEWAVE_LIVE=true`. | `backend/thrivewave.py`, `frontend/src/components/SmsSimulator.jsx` |
+| Cursor pattern detection | Cursor wrote the detector. The API runs that detector on the server for every report. It labels `SCAM`, `DELAYED_DELIVERY`, `BAD_SERVICE`, `POSITIVE`, and `SPAM`, in English and Swahili. The same text always gets the same label. | `backend/classifier.py` |
+| Score weights | Base 50, legal +25, praise +5 up to +20, scam −20, service −5, a complaint under 30 days counts double. | `backend/scoring.py`, formula `signal-v1` |
+| Search, report, vendor, legal check | Those routes are on the API. The legal check uses the mock KRA and BRS file the brief asked for. | `backend/main.py` |
+| Three demo shops | Nairobi Tech Hub Electronics 95, Trendy Clothez Kenya 25, Mama Boaz Organic Veggies 65. Seventeen more shops are added on startup so every band is on the page. | `backend/database.py`, `backend/showcase.py` |
+
+The classifier reads text that has already been filed as a report, or pasted with a public `https` link. It does not log into Instagram, WhatsApp, or TikTok, and it does not scrape a comment section. Public pages are links the buyer opens. `COMMENTS` then `NEXT` reads reviews already saved and does not change the score.
+
+M-Pesa is the payment check. **M-Pesa Verified** means the business name on that paybill is the same name as the KRA or BRS record. The badge does not add points. With Daraja keys set, Recheck calls Query Organization Info. With the keys empty, the seeded badge stays so the demo still shows the check. A reused M-Pesa confirmation code is stored as a hash and does not score a second time.
+
 ## What a buyer can do
 
 1. Search by paybill, phone, `@handle`, KRA PIN, or name.
@@ -68,13 +85,15 @@ A paybill or till is a number. The name on an Instagram page can be anything. **
 
 When both Daraja keys are empty, that call is skipped and the seeded badge stays. Nairobi Tech Hub Electronics keeps M-Pesa Verified in the demo for that reason. The demo paybills are not real Safaricom short codes, so a live lookup of `400200` cannot invent a match.
 
-On a fresh database the three seeded shops land at:
+On a fresh database the original three shops land at:
 
 | Shop | Score | Why |
 | --- | --- | --- |
 | Nairobi Tech Hub Electronics | 95 | 50, plus 25 for an active registry match, plus the +20 praise cap |
 | Mama Boaz Organic Veggies | 65 | 50, plus the +20 praise cap, minus 5 for an older late delivery. The registry file is pending |
 | Trendy Clothez Kenya | 25 | 50, minus 20 for an unresolved scam, minus 5 for a delivery complaint. Two spam texts are stored and ignored |
+
+Seventeen more shops are added on startup, including on a database that already has the first three. Together they show a matched KRA and BRS file, a pending PIN, a till name that matches, a till name that does not, a Swahili review, a public shop reply, and every score band.
 
 ## Public pages, not a social login
 
@@ -96,7 +115,7 @@ Choose **Register a shop** in the header, or text:
 REGISTER Kayole Greens, 0711222333, 556677
 ```
 
-The shop is added at a score of 50, with no KRA or BRS bonus. The form can also store Instagram, Facebook, and TikTok handles, which become the public links above. A paybill or phone that is already on file is refused, so a shop cannot register a second copy of an existing till.
+The form asks for the shop name, phone, paybill, KRA PIN, and BRS number. With no matching registry record the score starts at 50 and the PIN is kept on the legal tab. When the shop name matches the KRA or BRS record, that registration starts at 75. The form can also store Instagram, Facebook, and TikTok handles, which become the public links above. A paybill, phone, KRA PIN, or BRS number that is already on file is refused.
 
 A shop can also answer a report in public. The reply sits under the complaint. It does not change the score. A scam stops costing points only after a reviewer marks that report resolved.
 

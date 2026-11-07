@@ -469,7 +469,7 @@ def read_vendor_comments(vendor_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/v1/vendors", response_model=VendorDetail, status_code=201)
 def register_vendor(payload: VendorRegisterIn, background: BackgroundTasks, db: Session = Depends(get_db)):
-    """A shop registers itself. The score starts at 50 until a registry check or a report."""
+    """A shop registers itself. A KRA PIN or BRS number that matches the registry adds the legal bonus."""
     try:
         vendor = create_registered_vendor(
             db,
@@ -482,9 +482,13 @@ def register_vendor(payload: VendorRegisterIn, background: BackgroundTasks, db: 
             category=payload.category,
             location=payload.location,
             about=payload.about,
+            kra_pin=payload.kra_pin,
+            brs_number=payload.brs_number,
         )
+        _link_registration_record(db, vendor, payload.kra_pin, payload.brs_number)
     except DuplicateShop as exc:
-        label = "paybill" if exc.field == "paybill" else "phone"
+        labels = {"paybill": "paybill", "phone": "phone", "kra_pin": "KRA PIN", "brs_number": "BRS number"}
+        label = labels.get(exc.field, exc.field)
         raise HTTPException(status_code=409, detail=f"That {label} is already on file.") from exc
     db.commit()
     db.refresh(vendor)
@@ -492,6 +496,31 @@ def register_vendor(payload: VendorRegisterIn, background: BackgroundTasks, db: 
     if handle:
         background.add_task(_tiktok_check_in_background, handle)
     return vendor_detail(db, vendor)
+
+
+def _link_registration_record(db: Session, vendor: Vendor, kra_pin: str | None, brs_number: str | None) -> None:
+    """Keep a typed PIN on the shop. Apply the +25 only when the registry name agrees."""
+    if not kra_pin and not brs_number:
+        return
+    record = None
+    if kra_pin:
+        record = db.query(OfficialRecord).filter(OfficialRecord.kra_pin == kra_pin).first()
+    if brs_number:
+        other = db.query(OfficialRecord).filter(OfficialRecord.brs_number == brs_number).first()
+        if record and other and other.id != record.id:
+            raise HTTPException(status_code=400, detail="The KRA PIN and BRS number belong to different businesses.")
+        if record is None:
+            record = other
+    if record is None:
+        return
+    if not names_match(vendor.name, record.registered_name):
+        raise HTTPException(
+            status_code=409,
+            detail=f"That record belongs to {record.registered_name}. The shop name has to match it before the legal bonus applies.",
+        )
+    apply_record(vendor, record)
+    if vendor.about.startswith("Registered by the shop. No legal record"):
+        vendor.about = f"Registered by the shop. The name matches {record.registered_name}."[:1000]
 
 
 @app.post("/api/v1/classify", response_model=ClassifyOut)

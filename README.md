@@ -15,6 +15,23 @@ VeriDuka treats those as noise and signal:
 - **Signal** is a matching legal record plus reviews that include a public proof link.
 - **Noise** is spam, a comment with no post link, or a burst of praise that has already hit the cap.
 
+## How this matches the brief
+
+The Zinduathon brief asks for three partner pieces, one score, and a dashboard. Each one is a file a reviewer can open.
+
+| Brief | What the code does | Where |
+| --- | --- | --- |
+| Docker on RumptyCloud | One image builds the React app, then serves that app and the API on port 8000. The database is `sqlite:////data/veriduka.db`. Startup adds the judge shops if they are missing. | `Dockerfile`, `docker-compose.yml` |
+| ThriveWave SMS | Inbound text hits `POST /api/v1/sms/webhook`. `VERIFY`, `COMMENTS`, `NEXT`, `REGISTER`, and `HELP` all use the same score as the website. A live reply is sent by ThriveVas when `THRIVEWAVE_LIVE=true`. | `backend/thrivewave.py`, `frontend/src/components/SmsSimulator.jsx` |
+| Cursor pattern detection | Cursor wrote the detector. The API runs that detector on the server for every report. It labels `SCAM`, `DELAYED_DELIVERY`, `BAD_SERVICE`, `POSITIVE`, and `SPAM`, in English and Swahili. The same text always gets the same label. | `backend/classifier.py` |
+| Score weights | Base 50, legal +25, praise +5 up to +20, scam −20, service −5, a complaint under 30 days counts double. | `backend/scoring.py`, formula `signal-v1` |
+| Search, report, vendor, legal check | Those routes are on the API. The legal check uses the mock KRA and BRS file the brief asked for. | `backend/main.py` |
+| Three demo shops | Nairobi Tech Hub Electronics 95, Trendy Clothez Kenya 25, Mama Boaz Organic Veggies 65. Seventeen more shops are added on startup so every band is on the page. | `backend/database.py`, `backend/showcase.py` |
+
+The classifier reads text that has already been filed as a report, or pasted with a public `https` link. It does not log into Instagram, WhatsApp, or TikTok, and it does not scrape a comment section. Public pages are links the buyer opens. `COMMENTS` then `NEXT` reads reviews already saved and does not change the score.
+
+M-Pesa is the payment check. **M-Pesa Verified** means the business name on that paybill is the same name as the KRA or BRS record. The badge does not add points. With Daraja keys set, Recheck calls Query Organization Info. With the keys empty, the seeded badge stays so the demo still shows the check. A reused M-Pesa confirmation code is stored as a hash and does not score a second time.
+
 ## What a buyer can do
 
 1. Search by paybill, phone, `@handle`, KRA PIN, or name.

@@ -42,6 +42,8 @@ Copy `.env.example` to `.env`. Empty values keep the built-in mocks.
 | `META_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized the app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Live registry adapters, when those clients are added |
 | `REVIEW_API_KEY` | Required as `X-Review-Key` to mark a report resolved. Empty leaves the review action open for local use |
+| `WHATSAPP_VERIFY_TOKEN` | Handshake token for Meta's WhatsApp webhook. Empty disables the handshake |
+| `WHATSAPP_APP_SECRET` | When set, WhatsApp deliveries must carry a valid `X-Hub-Signature-256` |
 | `DARAJA_CONSUMER_KEY` and `DARAJA_CONSUMER_SECRET` | Reserved for a Safaricom till-name check |
 
 ## Social comments
@@ -50,7 +52,17 @@ A comment moves the score only when two things are true: the text has a clear pa
 
 Anyone can open a shop, choose Social comments, and paste comments from Instagram, Facebook, TikTok, X, or a WhatsApp chat. One comment per line.
 
-A connected shop is different. Meta's Graph API can read comments on an Instagram professional account that authorized this app. Use Sync connected Instagram after the token and account id are in `.env`. VeriDuka does not log into Instagram, and it does not pull comments from an account that has not granted access. WhatsApp has no public comment feed, so those notes are pasted by a buyer or, later, received from a shop that opts in to the WhatsApp Business webhook.
+A connected shop is different. Meta's Graph API can read comments on an Instagram professional account that authorized this app. Use Sync connected Instagram after the token and account id are in `.env`. VeriDuka does not log into Instagram, and it does not pull comments from an account that has not granted access. WhatsApp has no public comment feed, so those notes are pasted by a buyer or received from a shop that opts in, see below.
+
+### WhatsApp (opt-in)
+
+A shop connects its own WhatsApp Business number (Meta Cloud API), and only messages it forwards through that number reach VeriDuka. Private chats are never scraped.
+
+1. Register `https://<your-host>/api/v1/whatsapp/webhook` in Meta with `WHATSAPP_VERIFY_TOKEN` as the verify token.
+2. Connect the shop: `POST /api/v1/whatsapp/connect` with `{"vendor_id": 1, "phone_number_id": "<Meta phone_number_id>"}`. It needs `X-Review-Key` when `REVIEW_API_KEY` is set.
+3. Text messages to that number land in Social comments as platform `whatsapp`. They use the same rules as other comments: a message counts toward the score only when it includes a public link and reads as a clear pattern. Repeated message ids are skipped, and the sender is shown masked.
+
+A number nobody has connected is ignored.
 
 ## Try these
 

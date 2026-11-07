@@ -12,14 +12,19 @@ Two ways a comment becomes a trust signal:
    into Instagram, and it does not pull comments from an account that has not
    authorized the app.
 
-WhatsApp has no public comment feed. A buyer pastes the chat, or a shop later
-connects the WhatsApp Business webhook.
+WhatsApp has no public comment feed. A buyer pastes the chat, or a shop
+connects its own WhatsApp Business number (Meta WhatsApp Cloud API). Messages
+reach VeriDuka only through that shop's webhook, and only for a number the shop
+has connected. Private chats are never scraped.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -118,3 +123,47 @@ def fetch_authorized_instagram() -> tuple[str, list[dict]]:
                 }
             )
     return username, comments
+
+
+URL_IN_TEXT = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+
+def first_link(text: str) -> str | None:
+    """A WhatsApp message has no permalink. Use a link the sender included, if any."""
+    match = URL_IN_TEXT.search(text or "")
+    return match.group(0).rstrip(".,)") if match else None
+
+
+def valid_whatsapp_signature(raw_body: bytes, header: str | None) -> bool:
+    """Check Meta's X-Hub-Signature-256. With no WHATSAPP_APP_SECRET set, signing is skipped."""
+    secret = os.getenv("WHATSAPP_APP_SECRET", "").strip()
+    if not secret:
+        return True
+    if not header or not header.startswith("sha256="):
+        return False
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header.split("=", 1)[1])
+
+
+def parse_whatsapp_messages(payload: dict) -> list[dict]:
+    """Flatten a WhatsApp Cloud API webhook into text messages tagged with the receiving number id."""
+    messages: list[dict] = []
+    for entry in payload.get("entry") or []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            number_id = str((value.get("metadata") or {}).get("phone_number_id") or "")
+            for message in value.get("messages") or []:
+                if message.get("type") != "text":
+                    continue
+                body = ((message.get("text") or {}).get("body") or "").strip()
+                if not number_id or not body:
+                    continue
+                messages.append(
+                    {
+                        "phone_number_id": number_id,
+                        "external_id": str(message.get("id") or ""),
+                        "sender": str(message.get("from") or ""),
+                        "text": body,
+                    }
+                )
+    return messages

@@ -28,6 +28,8 @@ class Vendor(Base):
     kra_status: Mapped[str] = mapped_column(String(20), default="unverified")
     brs_status: Mapped[str] = mapped_column(String(20), default="unverified")
     is_shadow: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Meta WhatsApp Business phone_number_id. Set only when the shop connects its own number.
+    whatsapp_phone_number_id: Mapped[str | None] = mapped_column(String(40), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     reports: Mapped[list["Report"]] = relationship(

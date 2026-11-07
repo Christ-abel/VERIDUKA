@@ -324,3 +324,28 @@ class SocialSyncOut(BaseModel):
     message: str
     vendor_id: int | None = None
     username: str | None = None
+
+
+class WhatsAppConnectIn(BaseModel):
+    vendor_id: int
+    phone_number_id: str = Field(min_length=5, max_length=40, description="Meta phone_number_id of the shop's own WhatsApp Business number.")
+
+    @field_validator("phone_number_id")
+    @classmethod
+    def digits_only(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned.isdigit():
+            raise ValueError("phone_number_id is the numeric id from Meta, not the phone number.")
+        return cleaned
+
+
+class WhatsAppConnectOut(BaseModel):
+    vendor_id: int
+    vendor_name: str
+    phone_number_id: str
+
+
+class WhatsAppWebhookOut(BaseModel):
+    received: int
+    imported: int
+    ignored: int

@@ -141,6 +141,9 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3">
             <p className="hidden text-sm text-[#c5d5c9] sm:block">Zinduathon 3.0</p>
+            <a href="/pitch/" className="hidden rounded-full border border-white/20 px-3 py-1.5 text-sm sm:inline-block">
+              Pitch
+            </a>
             <button
               type="button"
               onClick={() => setRegistering(true)}

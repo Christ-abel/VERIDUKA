@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>[hidden]{display:none!important}html{padding:0}body{margin:0}</style>
+<title>VeriDuka Pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a fixed 1920x1080 stage scaled to the window; each slide plays its own animation when it becomes active.
+   Palette: night-green ground, warm paper text, and the three score bands as the only accent colors.
+   Type: Bricolage Grotesque for headlines, DM Sans for text, JetBrains Mono for scores and SMS. */
+:root {
+  --bg: #08150f;
+  --bg-2: #0e241a;
+  --card: #12301f;
+  --line: #24493a;
+  --ink: #f1f4ec;
+  --mute: #9bb2a3;
+  --signal: #3ddc97;
+  --caution: #f3b64a;
+  --noise: #ff6159;
+  --phone: #f4efe4;
+  --phone-ink: #14231b;
+  --display: "Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --body: "DM Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); overflow: hidden; }
+*, *::before, *::after { box-sizing: border-box; }
+
+.deck { position: fixed; inset: 0; background:
+  radial-gradient(1200px 700px at 78% 8%, #12392a 0%, transparent 60%),
+  radial-gradient(900px 600px at 5% 100%, #0c2a1e 0%, transparent 55%), var(--bg); }
+.stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: 0 0; }
+.slide { position: absolute; inset: 0; padding: 96px 120px 120px; display: none; flex-direction: column; }
+.slide.active { display: flex; }
+.eyebrow { font: 700 22px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--signal); }
+h1, h2 { font-family: var(--display); font-weight: 800; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+h1 { font-size: 168px; line-height: .92; }
+h2 { font-size: 84px; line-height: 1; max-width: 1500px; }
+p { margin: 0; }
+.lead { font-size: 36px; line-height: 1.4; color: var(--mute); max-width: 1100px; text-wrap: pretty; }
+.lead b { color: var(--ink); font-weight: 700; }
+.mono { font-family: var(--mono); }
+.s { color: var(--signal); } .c { color: var(--caution); } .n { color: var(--noise); }
+
+/* entrance animation, played whenever a slide becomes active */
+.slide.active [data-in] { animation: rise .7s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--d, 0) * 1s); }
+@keyframes rise { from { opacity: 0; transform: translateY(34px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }
+
+/* chrome */
+.progress { position: fixed; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(255,255,255,.07); z-index: 5; }
+.progress i { display: block; height: 100%; width: 0; background: var(--signal); transition: width .5s ease; }
+.hud { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: space-between; align-items: center;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); pointer-events: none; }
+.hud .count { font: 500 14px var(--mono); color: var(--mute); letter-spacing: .1em; }
+.hud .nav { display: flex; gap: 8px; pointer-events: auto; }
+.hud button { appearance: none; border: 1px solid var(--line); background: rgba(8,21,15,.8); color: var(--ink); width: 40px; height: 40px; border-radius: 50%; font: 700 16px var(--body); cursor: pointer; }
+.hud button:hover { border-color: var(--signal); color: var(--signal); }
+.hud button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.brand { position: absolute; top: 44px; right: 120px; font: 700 20px var(--display); letter-spacing: .02em; color: var(--mute); display: flex; gap: 12px; align-items: center; }
+.brand .bars { display: flex; gap: 4px; align-items: flex-end; height: 24px; }
+.brand .bars i { width: 6px; background: var(--signal); border-radius: 2px; }
+
+/* gauge */
+.gauge { position: relative; width: var(--size, 360px); height: var(--size, 360px); flex: none; }
+.gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.gauge circle { fill: none; stroke-width: 16; }
+.gauge .track { stroke: rgba(255,255,255,.08); }
+.gauge .prog { stroke-linecap: round; stroke-dasharray: 534; stroke-dashoffset: 534; transition: stroke-dashoffset 1.6s cubic-bezier(.2,.8,.2,1), stroke .4s; stroke: var(--signal); }
+.gauge.band-m .prog { stroke: var(--caution); } .gauge.band-n .prog { stroke: var(--noise); }
+.gauge .num { position: absolute; inset: 0; display: grid; place-items: center; font: 800 calc(var(--size, 360px) * .34)/1 var(--display); font-variant-numeric: tabular-nums; }
+.gauge .num small { position: absolute; bottom: 24%; font: 500 calc(var(--size, 360px) * .05) var(--mono); color: var(--mute); letter-spacing: .12em; }
+
+/* slide 1 */
+.s1 { justify-content: space-between; }
+.s1 .row { display: flex; align-items: center; justify-content: space-between; gap: 60px; flex: 1; }
+.s1 .tag { font-size: 44px; line-height: 1.25; color: var(--mute); margin-top: 36px; max-width: 900px; }
+.s1 .tag b { color: var(--ink); }
+.s1 .verdict { font: 700 28px var(--mono); letter-spacing: .14em; color: var(--signal); text-align: center; margin-top: 18px; }
+.sigbars { display: flex; align-items: flex-end; gap: 12px; height: 130px; margin-bottom: 34px; }
+.sigbars i { width: 26px; border-radius: 6px; background: var(--noise); height: var(--h1); transition: height 1s cubic-bezier(.3,.9,.3,1), background .8s; }
+.sigbars.on i { background: var(--signal); height: var(--h2); }
+.sigbar-labels { display: flex; gap: 28px; font: 700 20px var(--mono); letter-spacing: .14em; margin-bottom: 14px; }
+
+/* slide 2 */
+.cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 52px; }
+.look { background: var(--card); border: 1px solid var(--line); border-radius: 26px; padding: 26px; position: relative; height: 420px; overflow: hidden; }
+.look .kind { font: 700 18px var(--mono); letter-spacing: .14em; color: var(--mute); margin-bottom: 18px; }
+.ribbon { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 26px; font: 800 26px var(--display); letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 12px; }
+.ribbon.ok { background: rgba(61,220,151,.16); color: var(--signal); }
+.ribbon.bad { background: rgba(255,97,89,.18); color: var(--noise); }
+.ribbon::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: currentColor; }
+.slide.active .ribbon.ok { animation: swapA 5s infinite; animation-delay: var(--p, 0s); }
+.slide.active .ribbon.bad { animation: swapB 5s infinite; animation-delay: var(--p, 0s); }
+@keyframes swapA { 0%, 42% { opacity: 1; } 50%, 92% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes swapB { 0%, 42% { opacity: 0; } 50%, 92% { opacity: 1; } 100% { opacity: 0; } }
+.ig-head { display: flex; gap: 16px; align-items: center; }
+.avatar { width: 72px; height: 72px; border-radius: 50%; background: conic-gradient(from 200deg, #f3b64a, #ff6159, #a24bd9, #f3b64a); }
+.ig-head b { font-size: 26px; display: block; } .ig-head span { color: var(--mute); font-size: 20px; }
+.ig-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 20px; }
+.ig-grid i { aspect-ratio: 1; border-radius: 8px; background: linear-gradient(135deg, #1d5b43, #2c7a5b); }
+.ig-grid i:nth-child(2n) { background: linear-gradient(135deg, #5b3a1d, #9b6a2c); } .ig-grid i:nth-child(3n) { background: linear-gradient(135deg, #1d3a5b, #2c5f9b); }
+.bubble { max-width: 82%; padding: 14px 18px; border-radius: 18px; font-size: 24px; line-height: 1.35; margin-bottom: 12px; }
+.bubble.in { background: #1c3d2d; border-top-left-radius: 4px; } .bubble.out { background: #2d6a4a; margin-left: auto; border-top-right-radius: 4px; }
+.mpesa { background: #0c1f16; border: 1px solid var(--line); border-radius: 16px; padding: 22px; font: 500 22px/1.5 var(--mono); color: #cfe3d6; }
+.mpesa b { color: var(--signal); }
+.three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; margin-top: 40px; }
+.three p { font-size: 30px; line-height: 1.35; color: var(--mute); }
+.three p.last { color: var(--ink); font: 800 38px/1.15 var(--display); }
+
+/* slide 3 */
+.searchrow { display: flex; align-items: center; gap: 56px; margin-top: 50px; }
+.searchbox { flex: 1; background: var(--card); border: 2px solid var(--line); border-radius: 100px; padding: 30px 44px; font: 500 46px var(--mono); min-height: 112px; display: flex; align-items: center; gap: 14px; }
+.searchbox .caret { width: 4px; height: 52px; background: var(--signal); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.kinds { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; }
+.chip { font: 700 20px var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 12px 20px; border-radius: 100px; border: 1px solid var(--line); color: var(--mute); transition: all .3s; }
+.chip.on { background: var(--signal); color: #06140d; border-color: var(--signal); }
+.result { width: 520px; background: var(--card); border: 1px solid var(--line); border-radius: 30px; padding: 34px; display: flex; gap: 28px; align-items: center; }
+.result .nm { font: 800 34px/1.1 var(--display); } .result .vd { font: 700 18px var(--mono); letter-spacing: .12em; margin-top: 10px; }
+
+/* slide 4 */
+.s4 .bars { margin-top: 40px; display: grid; gap: 38px; }
+.build .who { font: 800 34px var(--display); margin-bottom: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+.build .who span { font: 700 56px var(--mono); }
+.track { position: relative; height: 66px; background: rgba(255,255,255,.06); border-radius: 14px; overflow: hidden; }
+.seg { position: absolute; top: 0; bottom: 0; display: grid; place-items: center; font: 700 24px var(--mono); color: #06140d; width: 0; transition: width .9s cubic-bezier(.2,.8,.2,1); white-space: nowrap; overflow: hidden; }
+.seg.base { background: #6d8678; place-items: center start; padding-left: 24px; } .seg.plus { background: var(--signal); } .seg.minus { background: var(--noise); color: #1a0705; }
+.ticks { display: flex; justify-content: space-between; font: 500 18px var(--mono); color: var(--mute); margin-top: 8px; }
+.rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 46px; }
+.rule { border-top: 3px solid var(--line); padding-top: 16px; font-size: 26px; line-height: 1.35; color: var(--mute); }
+.rule b { display: block; font: 800 38px var(--mono); margin-bottom: 4px; }
+
+/* slide 5 */
+.meter { position: relative; margin-top: 70px; height: 96px; border-radius: 20px; overflow: visible; display: flex; }
+.meter .z { height: 100%; display: grid; place-items: center; font: 800 28px var(--mono); color: #06140d; letter-spacing: .08em; }
+.meter .z1 { width: 50%; background: var(--noise); border-radius: 20px 0 0 20px; } .meter .z2 { width: 30%; background: var(--caution); } .meter .z3 { width: 20%; background: var(--signal); border-radius: 0 20px 20px 0; }
+.pin { position: absolute; top: -34px; left: 0; width: 0; transition: left 1.3s cubic-bezier(.5,0,.2,1); }
+.pin::before { content: ""; position: absolute; left: -3px; top: 20px; width: 6px; height: 150px; background: var(--ink); border-radius: 3px; }
+.pin b { position: absolute; left: 0; transform: translateX(-50%); top: -58px; font: 800 56px var(--mono); }
+.advice { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 90px; }
+.adv { border: 2px solid var(--line); border-radius: 26px; padding: 34px; transition: all .4s; opacity: .45; }
+.adv.on { opacity: 1; transform: translateY(-8px); }
+.adv.on.z1 { border-color: var(--noise); background: rgba(255,97,89,.1); } .adv.on.z2 { border-color: var(--caution); background: rgba(243,182,74,.1); } .adv.on.z3 { border-color: var(--signal); background: rgba(61,220,151,.1); }
+.adv .rng { font: 700 24px var(--mono); letter-spacing: .1em; color: var(--mute); }
+.adv h3 { font: 800 50px/1.05 var(--display); margin: 14px 0 0; }
+
+/* slide 6 */
+.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 56px; flex: 1; }
+.tool { background: var(--card); border: 1px solid var(--line); border-radius: 30px; padding: 44px; display: flex; flex-direction: column; gap: 20px; }
+.tool .ic { height: 120px; }
+.tool h3 { font: 800 56px var(--display); margin: 0; } .tool .role { font: 700 22px var(--mono); letter-spacing: .12em; color: var(--signal); text-transform: uppercase; }
+.tool p { font-size: 30px; line-height: 1.35; color: var(--mute); }
+.draw path, .draw rect, .draw line, .draw circle { stroke-dasharray: 400; stroke-dashoffset: 400; }
+.slide.active .draw path, .slide.active .draw rect, .slide.active .draw line, .slide.active .draw circle { animation: dash 1.6s ease forwards; animation-delay: calc(var(--d, .2) * 1s); }
+@keyframes dash { to { stroke-dashoffset: 0; } }
+
+/* slide 7 */
+.arch { display: flex; align-items: center; justify-content: space-between; margin-top: 50px; gap: 0; }
+.node { background: var(--card); border: 2px solid var(--line); border-radius: 28px; padding: 34px; text-align: center; }
+.node h4 { font: 800 40px var(--display); margin: 8px 0 6px; } .node span { font: 500 22px var(--mono); color: var(--mute); }
+.node.big { padding: 34px 42px; border-color: var(--signal); background: linear-gradient(180deg, rgba(61,220,151,.1), transparent); }
+.node.big .in { display: flex; gap: 22px; margin-top: 24px; }
+.node.big .in div { background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px; padding: 22px 30px; font: 700 28px var(--display); }
+.wire { flex: 1; height: 4px; position: relative; background: repeating-linear-gradient(90deg, var(--line) 0 14px, transparent 14px 26px); min-width: 90px; }
+.wire::after { content: ""; position: absolute; top: -8px; width: 20px; height: 20px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 22px var(--signal); animation: travel 2s linear infinite; }
+@keyframes travel { from { left: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { left: calc(100% - 20px); opacity: 0; } }
+.dots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 18px; }
+.dots i { width: 26px; height: 26px; border-radius: 50%; justify-self: center; background: var(--c); animation: pop .4s both; animation-delay: calc(var(--k) * .06s + .6s); }
+.facts { display: flex; gap: 56px; margin-top: 54px; }
+.facts p { font-size: 32px; line-height: 1.35; color: var(--mute); max-width: 520px; } .facts b { color: var(--ink); }
+
+/* slide 8 */
+.s8 .row { display: flex; gap: 90px; align-items: center; flex: 1; }
+.phone { width: 500px; height: 740px; background: #050d09; border: 3px solid #2c4a3b; border-radius: 64px; padding: 26px; position: relative; flex: none; margin-top: 8px; }
+.phone .scr { height: 100%; background: var(--phone); border-radius: 42px; padding: 28px 22px; color: var(--phone-ink); display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+.phone .hdr { font: 700 20px var(--mono); letter-spacing: .1em; text-align: center; color: #4d6757; padding-bottom: 12px; border-bottom: 1px solid #d5cdbb; }
+.msg { max-width: 88%; padding: 16px 20px; border-radius: 22px; font-size: 25px; line-height: 1.35; min-height: 28px; }
+.msg.me { background: #14231b; color: #f4efe4; margin-left: auto; border-bottom-right-radius: 6px; font-family: var(--mono); font-size: 24px; }
+.msg.bot { background: #fff; border: 1px solid #d5cdbb; border-bottom-left-radius: 6px; }
+.msg[hidden] { display: none; }
+.cmds { display: grid; gap: 18px; flex: 1; }
+.cmd { display: flex; gap: 26px; align-items: baseline; border-top: 2px solid var(--line); padding-top: 18px; }
+.cmd code { font: 800 34px var(--mono); color: var(--signal); width: 230px; flex: none; } .cmd span { font-size: 30px; color: var(--mute); line-height: 1.3; }
+
+/* slide 9 */
+.reader { margin-top: 30px; display: grid; gap: 12px; }
+.sent { display: flex; align-items: center; gap: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 13px 26px; }
+.sent q { flex: 1; font-size: 28px; quotes: none; line-height: 1.3; }
+.lang { font: 700 16px var(--mono); letter-spacing: .12em; color: var(--mute); width: 40px; flex: none; }
+.lab { font: 800 20px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 12px 18px; border-radius: 12px; width: 250px; text-align: center; flex: none; background: transparent; color: transparent; border: 2px dashed var(--line); transition: all .35s; }
+.lab.s { background: rgba(61,220,151,.16); color: var(--signal); border: 2px solid var(--signal); }
+.lab.c { background: rgba(243,182,74,.16); color: var(--caution); border: 2px solid var(--caution); }
+.lab.n { background: rgba(255,97,89,.16); color: var(--noise); border: 2px solid var(--noise); }
+.lab.g { background: rgba(155,178,163,.14); color: var(--mute); border: 2px solid var(--mute); }
+.note { display: flex; gap: 56px; margin-top: 24px; font-size: 26px; line-height: 1.35; color: var(--mute); } .note div { max-width: 780px; } .note b { color: var(--ink); }
+
+/* slide 10 */
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; margin-top: 50px; }
+.case { background: var(--card); border: 2px solid var(--line); border-radius: 30px; padding: 40px; position: relative; }
+.case.ok.go { border-color: var(--signal); } .case.bad.go { border-color: var(--noise); }
+.case h4 { font: 800 40px var(--display); margin: 0 0 24px; }
+.nm2 { background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; margin-bottom: 14px; }
+.nm2 small { display: block; font: 500 16px var(--mono); letter-spacing: .12em; color: var(--mute); margin-bottom: 6px; } .nm2 div { font: 700 30px var(--mono); }
+.verd { margin-top: 24px; font: 800 36px var(--display); display: flex; align-items: center; gap: 16px; opacity: 0; transition: opacity .5s .6s; }
+.case.go .verd { opacity: 1; } .case.ok .verd { color: var(--signal); } .case.bad .verd { color: var(--noise); }
+.mark { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font: 800 32px var(--mono); }
+.case.ok .mark { background: var(--signal); color: #06140d; } .case.bad .mark { background: var(--noise); color: #1a0705; }
+.foot { margin-top: 40px; font-size: 32px; color: var(--mute); max-width: 1500px; line-height: 1.4; } .foot b { color: var(--ink); }
+
+/* slide 11 */
+.shops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; margin-top: 54px; }
+.shop { background: var(--card); border: 1px solid var(--line); border-radius: 30px; padding: 36px 30px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px; }
+.shop h4 { font: 800 34px/1.1 var(--display); margin: 0; } .shop p { font-size: 25px; line-height: 1.35; color: var(--mute); }
+.shop .tg { font: 700 18px var(--mono); letter-spacing: .12em; }
+
+/* slide 12 */
+.s12 { justify-content: center; }
+.s12 h1 { font-size: 190px; }
+.live { margin-top: 60px; display: flex; gap: 40px; align-items: center; flex-wrap: wrap; }
+.live a { font: 700 38px var(--mono); color: var(--signal); text-decoration: none; border-bottom: 3px solid var(--signal); padding-bottom: 4px; }
+.legend { display: flex; gap: 22px; margin-top: 54px; } .legend span { font: 700 26px var(--mono); padding: 16px 26px; border-radius: 100px; }
+.legend .a { background: rgba(255,97,89,.16); color: var(--noise); } .legend .b { background: rgba(243,182,74,.16); color: var(--caution); } .legend .d { background: rgba(61,220,151,.16); color: var(--signal); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: .01s !important; }
+  .slide [data-in], .dots i { opacity: 1 !important; transform: none !important; }
+  .draw path, .draw rect, .draw line, .draw circle { stroke-dashoffset: 0 !important; }
+}
+</style>
+
+<div class="deck" id="deck">
+  <div class="stage" id="stage">
+
+    <!-- 1 Title -->
+    <section class="slide s1" id="slide-1">
+      <div class="brand"><span class="bars"><i style="height:10px"></i><i style="height:16px"></i><i style="height:24px"></i></span>Zinduathon 3.0</div>
+      <div class="row">
+        <div>
+          <p class="eyebrow" data-in style="--d:0">Merchant trust signals</p>
+          <h1 data-in style="--d:.1; margin-top:26px">VeriDuka</h1>
+          <p class="tag" data-in style="--d:.3">The check a buyer runs <b>before they send money on M-Pesa.</b></p>
+        </div>
+        <div>
+          <div class="sigbar-labels" data-in style="--d:.2"><span class="n">NOISE</span><span class="s">SIGNAL</span></div>
+          <div class="sigbars" id="sigbars" data-in style="--d:.2"></div>
+          <div class="gauge" id="g1" style="--size:430px; margin:0 auto" data-v="95"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="85"/><circle class="prog" cx="100" cy="100" r="85"/></svg><div class="num">0<small>OUT OF 100</small></div></div>
+          <p class="verdict" id="v1">VERIFIED SIGNAL</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 Problem -->
+    <section class="slide" id="slide-2">
+      <p class="eyebrow" data-in>The problem</p>
+      <h2 data-in style="--d:.1; margin-top:22px">A real shop and a ghost shop look the same.</h2>
+      <div class="cards3">
+        <div class="look" data-in style="--d:.25"><div class="kind">INSTAGRAM PAGE</div>
+          <div class="ig-head"><div class="avatar"></div><div><b>mama.fashionhub_ke</b><span>12.4k followers · DM to order</span></div></div>
+          <div class="ig-grid"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="ribbon ok" style="--p:0s">Registered shop</div><div class="ribbon bad" style="--p:0s">Gone after payment</div></div>
+        <div class="look" data-in style="--d:.4"><div class="kind">WHATSAPP CHAT</div>
+          <div class="bubble in">Hi! Yes the dress is available 🙂</div>
+          <div class="bubble in">Send Ksh 2,500 to paybill 987654, account ORDER</div>
+          <div class="bubble out">Sent. Confirmation attached</div>
+          <div class="ribbon ok" style="--p:-1.6s">Registered shop</div><div class="ribbon bad" style="--p:-1.6s">Gone after payment</div></div>
+        <div class="look" data-in style="--d:.55"><div class="kind">PAYBILL SCREENSHOT</div>
+          <div class="mpesa"><b>Confirmed.</b> Ksh 2,500.00 sent to<br>paybill <b>987654</b><br>on 7/11/26 at 2:14 PM.<br>M-Pesa balance is Ksh 1,204.50</div>
+          <div class="ribbon ok" style="--p:-3.2s">Registered shop</div><div class="ribbon bad" style="--p:-3.2s">Gone after payment</div></div>
+      </div>
+      <div class="three">
+        <p data-in style="--d:.8">Star ratings are easy to flood.</p>
+        <p data-in style="--d:.95">A company search misses the shops that never registered.</p>
+        <p class="last" data-in style="--d:1.1">The buyer is left guessing.</p>
+      </div>
+    </section>
+
+    <!-- 3 The check -->
+    <section class="slide" id="slide-3">
+      <p class="eyebrow" data-in>The check</p>
+      <h2 data-in style="--d:.1; margin-top:22px">Search anything. Get one number.</h2>
+      <div class="searchrow" data-in style="--d:.3">
+        <div style="flex:1">
+          <div class="searchbox"><span id="typed"></span><span class="caret"></span></div>
+          <div class="kinds" id="kinds">
+            <span class="chip">Paybill</span><span class="chip">Phone</span><span class="chip">Instagram handle</span><span class="chip">KRA PIN</span><span class="chip">Shop name</span>
+          </div>
+        </div>
+        <div class="result"><div class="gauge" id="g3" style="--size:200px" data-v="0"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="85"/><circle class="prog" cx="100" cy="100" r="85"/></svg><div class="num">0</div></div>
+          <div><div class="nm" id="r3n">Nairobi Tech Hub Electronics</div><div class="vd" id="r3v">VERIFIED SIGNAL</div></div></div>
+      </div>
+      <p class="lead" style="margin-top:56px" data-in>The score runs <b>0 to 100</b>. It starts at <b>50</b> and moves only on the legal record and on reports that describe a real order.</p>
+    </section>
+
+    <!-- 4 Score build -->
+    <section class="slide s4" id="slide-4">
+      <p class="eyebrow" data-in>How the score moves</p>
+      <h2 data-in style="--d:.1; margin-top:22px">Start at 50. Evidence does the rest.</h2>
+      <div class="bars">
+        <div class="build" data-in style="--d:.25"><div class="who">Nairobi Tech Hub Electronics <span class="s" id="t4a">50</span></div>
+          <div class="track"><div class="seg base" id="a0" style="left:0">50 BASE</div><div class="seg plus" id="a1" style="left:50%">+25 LEGAL</div><div class="seg plus" id="a2" style="left:75%">+20 PRAISE</div></div></div>
+        <div class="build" data-in style="--d:.4"><div class="who">Trendy Clothez Kenya <span class="n" id="t4b">50</span></div>
+          <div class="track"><div class="seg base" id="b0" style="left:0">50 BASE</div><div class="seg minus" id="b1" style="left:25%">−20 SCAM</div><div class="seg minus" id="b2" style="left:20%">−5</div></div></div>
+        <div class="ticks" data-in style="--d:.4"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      </div>
+      <div class="rules" data-in style="--d:.6">
+        <div class="rule"><b class="s">+25</b>An active KRA PIN or a registered business name</div>
+        <div class="rule"><b class="s">+5 each, up to +20</b>Praise that describes a real order</div>
+        <div class="rule"><b class="n">−20</b>An unresolved scam report</div>
+        <div class="rule"><b class="c">−5</b>A late delivery or poor service. A complaint from the last 30 days counts double</div>
+        <div class="rule"><b>0</b>Spam stays on file and does not move the score</div>
+      </div>
+    </section>
+
+    <!-- 5 Bands -->
+    <section class="slide" id="slide-5">
+      <p class="eyebrow" data-in>What the number means</p>
+      <h2 data-in style="--d:.1; margin-top:22px">One score. One clear action.</h2>
+      <div class="meter" data-in style="--d:.3">
+        <div class="z z1">0 – 49</div><div class="z z2">50 – 79</div><div class="z z3">80 – 100</div>
+        <div class="pin" id="pin"><b id="pinv">0</b></div>
+      </div>
+      <div class="advice">
+        <div class="adv z1" id="adv1"><div class="rng">0 TO 49</div><h3>Do not pay upfront.</h3></div>
+        <div class="adv z2" id="adv2"><div class="rng">50 TO 79</div><h3>Pay on delivery.</h3></div>
+        <div class="adv z3" id="adv3"><div class="rng">80 TO 100</div><h3>Safe to pay on M-Pesa.</h3></div>
+      </div>
+    </section>
+
+    <!-- 6 Three tools -->
+    <section class="slide" id="slide-6">
+      <p class="eyebrow" data-in>Three tools from the brief</p>
+      <h2 data-in style="--d:.1; margin-top:22px">Each one does one job.</h2>
+      <div class="tools">
+        <div class="tool" data-in style="--d:.25"><svg class="ic draw" viewBox="0 0 120 120" fill="none" stroke="#3ddc97" stroke-width="5" stroke-linecap="round"><rect x="18" y="18" width="84" height="26" rx="8" style="--d:.3"/><rect x="18" y="52" width="84" height="26" rx="8" style="--d:.6"/><rect x="18" y="86" width="84" height="20" rx="8" style="--d:.9"/><circle cx="34" cy="31" r="3" style="--d:1.1"/><circle cx="34" cy="65" r="3" style="--d:1.2"/></svg>
+          <div class="role">Hosts it</div><h3>RumptyCloud</h3><p>Runs the website and the API as one app, keeps the shops in one database, and serves the page a judge opens.</p></div>
+        <div class="tool" data-in style="--d:.4"><svg class="ic draw" viewBox="0 0 120 120" fill="none" stroke="#f3b64a" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="38" y="8" width="44" height="86" rx="10" style="--d:.3"/><path d="M52 84h16" style="--d:.7"/><path d="M14 54h16M14 40h10" style="--d:.9"/><path d="M90 40h16M96 54h10" style="--d:1.1"/><path d="M30 104l10-10h44l10 10" style="--d:1.3"/></svg>
+          <div class="role" style="color:var(--caution)">Carries it</div><h3>ThriveWave</h3><p>Brings the same score to any phone by SMS. No smartphone and no data needed.</p></div>
+        <div class="tool" data-in style="--d:.55"><svg class="ic draw" viewBox="0 0 120 120" fill="none" stroke="#ff8a82" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M40 34L16 60l24 26" style="--d:.3"/><path d="M80 34l24 26-24 26" style="--d:.6"/><path d="M68 24L52 96" style="--d:.9"/></svg>
+          <div class="role" style="color:#ff8a82">Reads it</div><h3>Cursor</h3><p>Built the reader that labels a buyer's own words, in English or Swahili, as scam, delay, poor service, praise or spam.</p></div>
+      </div>
+    </section>
+
+    <!-- 7 RumptyCloud -->
+    <section class="slide" id="slide-7">
+      <p class="eyebrow" data-in>RumptyCloud</p>
+      <h2 data-in style="--d:.1; margin-top:22px">One app. One database. One link.</h2>
+      <div class="arch" data-in style="--d:.3">
+        <div class="node"><span>A JUDGE OPENS</span><h4>The public page</h4><span>any browser</span></div>
+        <div class="wire"></div>
+        <div class="node big"><span>ONE DOCKER APP ON RUMPTYCLOUD</span><div class="in"><div>Website</div><div>API</div></div></div>
+        <div class="wire" style="animation-delay:.4s"></div>
+        <div class="node"><span>ONE DATABASE</span><h4>20 shops</h4><div class="dots" id="dots"></div></div>
+      </div>
+      <div class="facts">
+        <p data-in style="--d:.7"><b>The same container is the public demo.</b> What you see is what runs.</p>
+        <p data-in style="--d:.85"><b>20 Kenyan shops</b> across every score band, from a spotless 95 to a flat 0.</p>
+      </div>
+    </section>
+
+    <!-- 8 ThriveWave -->
+    <section class="slide s8" id="slide-8">
+      <p class="eyebrow" data-in>ThriveWave</p>
+      <h2 data-in style="--d:.1; margin-top:22px">The same score, in one SMS.</h2>
+      <div class="row" style="margin-top:20px">
+        <div class="phone" data-in style="--d:.3"><div class="scr"><div class="hdr">VERIDUKA</div>
+          <div class="msg me" id="m1" hidden></div><div class="msg bot" id="m2" hidden></div></div></div>
+        <div class="cmds">
+          <div class="cmd" data-in style="--d:.5"><code>VERIFY</code><span>then a paybill. The reply is the same number, band and advice as the website.</span></div>
+          <div class="cmd" data-in style="--d:.65"><code>COMMENTS</code><span>reads the saved reviews on a feature phone.</span></div>
+          <div class="cmd" data-in style="--d:.8"><code>NEXT</code><span>moves to the next review.</span></div>
+          <div class="cmd" data-in style="--d:.95"><code>REGISTER</code><span>files a new shop.</span></div>
+          <p class="lead" data-in style="--d:1.1; font-size:30px">On the demo, a judge types their own 07 number and the reply lands on that handset.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9 Cursor reader -->
+    <section class="slide" id="slide-9">
+      <p class="eyebrow" data-in>Cursor</p>
+      <h2 data-in style="--d:.1; margin-top:22px">A reader for what buyers actually write.</h2>
+      <div class="reader" id="reader"></div>
+      <div class="note">
+        <div data-in style="--d:.3"><b>The same sentence always gets the same label.</b> The server runs the reader on every report.</div>
+        <div data-in style="--d:.4">A comment changes the score <b>only after it is filed</b> and the reader accepts it. Instagram, Facebook and TikTok stay as links the buyer opens.</div>
+      </div>
+    </section>
+
+    <!-- 10 M-Pesa Verified -->
+    <section class="slide" id="slide-10">
+      <p class="eyebrow" data-in>M-Pesa Verified</p>
+      <h2 data-in style="--d:.1; margin-top:22px">The till name must match the legal name.</h2>
+      <div class="cmp">
+        <div class="case ok" id="c1" data-in style="--d:.25"><h4>Paybill 400200</h4>
+          <div class="nm2"><small>NAME ON THE M-PESA TILL</small><div>NAIROBI TECH HUB ELECTRONICS</div></div>
+          <div class="nm2"><small>NAME ON THE KRA / BRS RECORD</small><div>NAIROBI TECH HUB ELECTRONICS</div></div>
+          <div class="verd"><span class="mark">✓</span>M-Pesa Verified</div></div>
+        <div class="case bad" id="c2" data-in style="--d:.4"><h4>A borrowed till</h4>
+          <div class="nm2"><small>NAME ON THE M-PESA TILL</small><div>QUICK CASH AGENTS</div></div>
+          <div class="nm2"><small>NAME ON THE KRA / BRS RECORD</small><div>MACHAKOS MATTRESS DEPOT</div></div>
+          <div class="verd"><span class="mark">✕</span>Names disagree. Check fails</div></div>
+      </div>
+      <p class="foot" data-in style="--d:.7">The badge adds <b>no points</b>. Points still come only from the legal record and from reports the reader accepts.</p>
+    </section>
+
+    <!-- 11 Four shops -->
+    <section class="slide" id="slide-11">
+      <p class="eyebrow" data-in>Four shops, four answers</p>
+      <h2 data-in style="--d:.1; margin-top:22px">From 95 down to 0.</h2>
+      <div class="shops">
+        <div class="shop" data-in style="--d:.2"><div class="gauge" data-v="95" style="--size:240px"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="85"/><circle class="prog" cx="100" cy="100" r="85"/></svg><div class="num">0</div></div>
+          <h4>Nairobi Tech Hub Electronics</h4><div class="tg s">VERIFIED SIGNAL</div><p>KRA and BRS match, and praise that describes real orders.</p></div>
+        <div class="shop" data-in style="--d:.35"><div class="gauge" data-v="65" style="--size:240px"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="85"/><circle class="prog" cx="100" cy="100" r="85"/></svg><div class="num">0</div></div>
+          <h4>Mama Boaz Organic Veggies</h4><div class="tg c">MODERATE RISK</div><p>The KRA file is still pending, so the legal bonus is not there yet.</p></div>
+        <div class="shop" data-in style="--d:.5"><div class="gauge" data-v="25" style="--size:240px"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="85"/><circle class="prog" cx="100" cy="100" r="85"/></svg><div class="num">0</div></div>
+          <h4>Trendy Clothez Kenya</h4><div class="tg n">FRAUD ALERT</div><p>An unresolved scam and a service complaint, with no registry match.</p></div>
+        <div class="shop" data-in style="--d:.65"><div class="gauge" data-v="0" style="--size:240px"><svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="85"/><circle class="prog" cx="100" cy="100" r="85"/></svg><div class="num">0</div></div>
+          <h4>Machakos Mattress Depot</h4><div class="tg n">FRAUD ALERT</div><p>The till name on M-Pesa is Quick Cash Agents, and a recent scam is on file.</p></div>
+      </div>
+    </section>
+
+    <!-- 12 Close -->
+    <section class="slide s12" id="slide-12">
+      <p class="eyebrow" data-in>VeriDuka</p>
+      <h1 data-in style="--d:.1; margin-top:26px">Check before<br>you send.</h1>
+      <div class="legend" data-in style="--d:.35"><span class="a">0–49 Do not pay upfront</span><span class="b">50–79 Pay on delivery</span><span class="d">80–100 Safe to pay on M-Pesa</span></div>
+      <div class="live" data-in style="--d:.5"><a href="https://dynamic-narwhal-97d5c2.rumptycloud.app" target="_blank" rel="noopener">dynamic-narwhal-97d5c2.rumptycloud.app</a></div>
+    </section>
+
+  </div>
+</div>
+
+<div class="progress"><i id="bar"></i></div>
+<div class="hud"><span class="count" id="count">1 / 12</span><div class="nav"><button id="prev" aria-label="Previous slide">&#8592;</button><button id="next" aria-label="Next slide">&#8594;</button></div></div>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var stage = document.getElementById('stage');
+  var cur = -1, gen = 0, timers = [];
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(' + (-960 * s) + 'px,' + (-540 * s) + 'px) scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit); fit();
+
+  function later(fn, ms) { var g = gen; var t = setTimeout(function () { if (g === gen) fn(); }, reduce ? 0 : ms); timers.push(t); }
+  function clearAll() { gen++; timers.forEach(clearTimeout); timers = []; }
+  function wait(ms) { return new Promise(function (r) { later(r, ms); }); }
+
+  /* gauges */
+  function bandClass(v) { return v >= 80 ? '' : v >= 50 ? 'band-m' : 'band-n'; }
+  function setGauge(g, v, delay) {
+    var prog = g.querySelector('.prog'), num = g.querySelector('.num');
+    var small = num.querySelector('small'); var g0 = gen;
+    g.classList.remove('band-m', 'band-n'); var b = bandClass(v); if (b) g.classList.add(b);
+    later(function () { prog.style.strokeDashoffset = String(534 - 534 * v / 100); }, delay || 0);
+    var start = null, dur = reduce ? 1 : 1500;
+    function step(ts) {
+      if (g0 !== gen) return;
+      if (start === null) start = ts + (delay || 0);
+      var p = Math.max(0, Math.min(1, (ts - start) / dur)); var e = 1 - Math.pow(1 - p, 3);
+      num.firstChild.nodeValue = String(Math.round(v * e));
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  function resetGauge(g) { g.querySelector('.prog').style.strokeDashoffset = '534'; g.querySelector('.num').firstChild.nodeValue = '0'; }
+
+  /* typewriter */
+  async function typeInto(el, text, speed) {
+    el.textContent = '';
+    for (var i = 0; i < text.length; i++) { el.textContent = text.slice(0, i + 1); await wait(speed); }
+  }
+
+  /* slide 1 */
+  var sig = document.getElementById('sigbars');
+  var h1 = [60, 110, 40, 90, 30, 100, 50, 120, 35, 80, 70, 25], h2 = [30, 45, 60, 75, 90, 100, 110, 120, 125, 128, 130, 130];
+  h1.forEach(function (h, i) { var b = document.createElement('i'); b.style.setProperty('--h1', h + 'px'); b.style.setProperty('--h2', h2[i] + 'px'); sig.appendChild(b); });
+
+  /* slide 7 dots */
+  var cols = ['var(--signal)', 'var(--signal)', 'var(--signal)', 'var(--signal)', 'var(--signal)', 'var(--signal)', 'var(--caution)', 'var(--caution)', 'var(--caution)', 'var(--caution)', 'var(--caution)', 'var(--caution)', 'var(--noise)', 'var(--noise)', 'var(--noise)', 'var(--noise)', 'var(--noise)', 'var(--noise)', 'var(--noise)', 'var(--noise)'];
+  var dots = document.getElementById('dots');
+  cols.forEach(function (c, i) { var d = document.createElement('i'); d.style.setProperty('--c', c); d.style.setProperty('--k', i); dots.appendChild(d); });
+
+  /* slide 9 sentences */
+  var sentences = [
+    ['EN', 'They took my money and blocked me. This is a scam.', 'n', 'Scam'],
+    ['SW', 'Walinichukua pesa yangu na hawajanitumia mzigo. Ni matapeli!', 'n', 'Scam'],
+    ['EN', 'Rider said he is on the way 5 days ago. Still waiting.', 'c', 'Delayed delivery'],
+    ['EN', 'Wrong item, and they ignored my calls when I asked for a refund.', 'c', 'Poor service'],
+    ['SW', 'Mzigo ulifika siku ya pili, umepakiwa vizuri. Nitanunua tena.', 's', 'Praise'],
+    ['EN', 'SCAM SCAM SCAM click here for free airtime bit.ly/win', 'g', 'Spam']
+  ];
+  var reader = document.getElementById('reader');
+  sentences.forEach(function (s) {
+    var r = document.createElement('div'); r.className = 'sent'; r.setAttribute('data-in', '');
+    r.innerHTML = '<span class="lang">' + s[0] + '</span><q></q><span class="lab" data-cls="' + s[2] + '" data-t="' + s[3] + '">&nbsp;</span>';
+    r.querySelector('q').textContent = s[1]; reader.appendChild(r);
+  });
+
+  /* per-slide scripts */
+  var scenes = {
+    0: function () {
+      var g = document.getElementById('g1'), v = document.getElementById('v1');
+      sig.classList.remove('on'); resetGauge(g); v.style.opacity = '0';
+      later(function () { sig.classList.add('on'); }, 900);
+      setGauge(g, 95, 1500);
+      later(function () { v.style.opacity = '1'; v.style.transition = 'opacity .5s'; }, 3000);
+    },
+    2: async function () {
+      var items = [
+        ['0400200'.slice(1), 0, 'Paybill', 'Nairobi Tech Hub Electronics', 95, 'VERIFIED SIGNAL'],
+        ['0722 113 344', 1, 'Phone', 'Mama Boaz Organic Veggies', 65, 'MODERATE RISK'],
+        ['@trendyclothez_ke', 2, 'Instagram handle', 'Trendy Clothez Kenya', 25, 'FRAUD ALERT'],
+        ['P051987654Z', 3, 'KRA PIN', 'Nairobi Tech Hub Electronics', 95, 'VERIFIED SIGNAL'],
+        ['Machakos Mattress', 4, 'Shop name', 'Machakos Mattress Depot', 0, 'FRAUD ALERT']
+      ];
+      var typed = document.getElementById('typed'), chips = document.querySelectorAll('#kinds .chip');
+      var g = document.getElementById('g3'), nm = document.getElementById('r3n'), vd = document.getElementById('r3v');
+      var g0 = gen;
+      for (var round = 0; round < 3 && g0 === gen; round++) {
+        for (var k = 0; k < items.length; k++) {
+          if (g0 !== gen) return;
+          var it = items[k];
+          chips.forEach(function (c, ci) { c.classList.toggle('on', ci === it[1]); });
+          resetGauge(g); nm.textContent = ''; vd.textContent = '';
+          await typeInto(typed, it[0], 85);
+          await wait(250);
+          nm.textContent = it[3]; vd.textContent = it[5]; vd.style.color = it[4] >= 80 ? 'var(--signal)' : it[4] >= 50 ? 'var(--caution)' : 'var(--noise)';
+          setGauge(g, it[4], 0);
+          await wait(2400);
+        }
+      }
+    },
+    3: function () {
+      var set = function (id, w) { document.getElementById(id).style.width = w; };
+      ['a0', 'a1', 'a2', 'b0', 'b1', 'b2'].forEach(function (id) { set(id, '0'); });
+      var ta = document.getElementById('t4a'), tb = document.getElementById('t4b'); ta.textContent = '50'; tb.textContent = '50';
+      document.getElementById('b1').style.left = '30%'; document.getElementById('b2').style.left = '25%';
+      later(function () { set('a0', '50%'); set('b0', '50%'); }, 500);
+      later(function () { set('a1', '25%'); ta.textContent = '75'; set('b1', '20%'); tb.textContent = '30'; }, 1500);
+      later(function () { set('a2', '20%'); ta.textContent = '95'; set('b2', '5%'); tb.textContent = '25'; }, 2500);
+    },
+    4: async function () {
+      var pin = document.getElementById('pin'), pv = document.getElementById('pinv'), adv = [1, 2, 3].map(function (i) { return document.getElementById('adv' + i); });
+      var width = document.querySelector('.meter').clientWidth || 1680;
+      var g0 = gen;
+      var stops = [[25, 0], [65, 1], [95, 2]];
+      for (var r = 0; r < 4 && g0 === gen; r++) {
+        for (var i = 0; i < stops.length; i++) {
+          if (g0 !== gen) return;
+          pin.style.left = (stops[i][0] / 100 * width) + 'px';
+          adv.forEach(function (a, ai) { a.classList.toggle('on', ai === stops[i][1]); });
+          var from = parseInt(pv.textContent, 10) || 0, to = stops[i][0], t0 = performance.now();
+          (function tick(now) { if (g0 !== gen) return; var p = Math.min(1, (now - t0) / 1300); pv.textContent = Math.round(from + (to - from) * p); if (p < 1) requestAnimationFrame(tick); })(t0);
+          await wait(2600);
+        }
+      }
+    },
+    7: async function () {
+      var m1 = document.getElementById('m1'), m2 = document.getElementById('m2'); var g0 = gen;
+      var reply = 'VeriDuka: Nairobi Tech Hub Electronics. 95% VERIFIED SIGNAL. KRA/BRS match. Safe to pay.';
+      while (g0 === gen) {
+        m1.hidden = true; m2.hidden = true; m1.textContent = ''; m2.textContent = '';
+        await wait(900); m1.hidden = false; await typeInto(m1, 'VERIFY 400200', 90);
+        await wait(700); m2.hidden = false; await typeInto(m2, reply, 22);
+        await wait(5200);
+      }
+    },
+    8: function () {
+      var labs = document.querySelectorAll('#reader .lab');
+      labs.forEach(function (l) { l.className = 'lab'; l.innerHTML = '&nbsp;'; });
+      labs.forEach(function (l, i) { later(function () { l.className = 'lab ' + l.dataset.cls; l.textContent = l.dataset.t; }, 900 + i * 700); });
+    },
+    9: function () {
+      var a = document.getElementById('c1'), b = document.getElementById('c2'); a.classList.remove('go'); b.classList.remove('go');
+      later(function () { a.classList.add('go'); }, 900); later(function () { b.classList.add('go'); }, 2200);
+    },
+    10: function () {
+      document.querySelectorAll('#slide-11 .gauge').forEach(function (g, i) { resetGauge(g); setGauge(g, parseInt(g.dataset.v, 10), 500 + i * 300); });
+    }
+  };
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n)); if (n === cur) return;
+    clearAll();
+    if (cur >= 0) slides[cur].classList.remove('active');
+    cur = n; slides[cur].classList.add('active');
+    document.getElementById('count').textContent = (cur + 1) + ' / ' + slides.length;
+    document.getElementById('bar').style.width = ((cur + 1) / slides.length * 100) + '%';
+    try { history.replaceState(null, '', '#slide-' + (cur + 1)); } catch (e) { location.hash = 'slide-' + (cur + 1); }
+    if (scenes[cur]) scenes[cur]();
+  }
+  function fromHash() { var m = /slide-(\d+)/.exec(location.hash); return m ? parseInt(m[1], 10) - 1 : 0; }
+
+  document.getElementById('next').addEventListener('click', function (e) { e.stopPropagation(); go(cur + 1); });
+  document.getElementById('prev').addEventListener('click', function (e) { e.stopPropagation(); go(cur - 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') go(0); else if (e.key === 'End') go(slides.length - 1);
+  });
+  document.getElementById('deck').addEventListener('click', function (e) { if (e.target.closest('a')) return; go(e.clientX > window.innerWidth / 2 ? cur + 1 : cur - 1); });
+  var tx = null;
+  document.addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', function (e) { if (tx === null) return; var dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 50) go(cur + (dx < 0 ? 1 : -1)); tx = null; }, { passive: true });
+  window.addEventListener('hashchange', function () { go(fromHash()); });
+  go(fromHash());
+})();
+</script>
+
+</html>

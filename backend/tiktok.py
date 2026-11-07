@@ -12,7 +12,8 @@ comments, about $0.02, which the Apify free plan's monthly credit covers many
 times over.
 
 The comments go through the same on-box classifier as buyer reports. A lookup
-only reads and classifies. Nothing is saved or scored unless the caller asks.
+only reads and classifies. If OPENROUTER_API_KEY is set, a model also gives a
+second opinion on each comment (ai_review.py), for display only. Nothing is saved or scored unless the caller asks.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import ai_review
 from classifier import classify_report
 
 PROFILE_ACTOR = "clockworks~tiktok-profile-scraper"
@@ -215,4 +217,14 @@ def lookup(handle: str, videos: int = 3, comments_per_video: int = 5) -> dict:
     profile, posts = fetch_profile(handle, videos, token)
     commented = [post["url"] for post in posts if post["url"] and post["comment_count"] > 0]
     comments = classify_comments(fetch_comments(commented, comments_per_video, token))
-    return {"profile": profile, "videos": posts, "comments": comments, "summary": summarize(comments)}
+    review = ai_review.review_comments(profile, comments)
+    if review:
+        for index, comment in enumerate(comments):
+            comment["ai_review"] = review["reviews"].get(index)
+    return {
+        "profile": profile,
+        "videos": posts,
+        "comments": comments,
+        "summary": summarize(comments),
+        "ai": {"model": review["model"], "overall": review["overall"]} if review else None,
+    }

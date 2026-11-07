@@ -895,6 +895,7 @@ def tiktok_lookup_endpoint(payload: TikTokLookupIn, db: Session = Depends(get_db
         videos=result["videos"],
         comments=result["comments"],
         summary=result["summary"],
+        ai=result["ai"],
         vendor_id=vendor.id if vendor else None,
         saved=saved,
         note=note,

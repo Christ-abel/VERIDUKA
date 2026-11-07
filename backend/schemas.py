@@ -428,6 +428,7 @@ class TikTokLookupOut(BaseModel):
     videos: list[dict]
     comments: list[dict]
     summary: dict
+    ai: dict | None = None
     vendor_id: int | None = None
     saved: int = 0
     note: str = ""

@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { api } from "../api";
 
+const AI_LABEL = {
+  SCAM: "Scam",
+  DELAYED_DELIVERY: "Delayed delivery",
+  BAD_SERVICE: "Bad service",
+  POSITIVE: "Positive",
+  SPAM: "Spam",
+  NEUTRAL: "Neutral",
+};
+
 const TONE = {
+  NEUTRAL: "text-ink/60",
   SCAM: "text-noise",
   DELAYED_DELIVERY: "text-caution",
   BAD_SERVICE: "text-caution",
@@ -96,6 +106,13 @@ export default function TikTokLookup({ onSaved }) {
           {profile.bio && <p className="mt-2 text-sm leading-relaxed text-ink/85">{profile.bio}</p>}
           {profile.bio_link && <p className="mt-1 break-all text-xs text-ink/55">Link in bio: {profile.bio_link}</p>}
 
+          {result.ai?.overall && (
+            <div className="mt-4 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-ink/50">AI read of these comments ({result.ai.model})</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink/90">{result.ai.overall}</p>
+            </div>
+          )}
+
           <h3 className="mt-4 text-sm font-semibold text-ink">
             {result.comments.length
               ? `${result.comments.length} recent comment${result.comments.length === 1 ? "" : "s"} read`
@@ -113,6 +130,17 @@ export default function TikTokLookup({ onSaved }) {
                     </span>{" "}
                     · {Math.round(comment.classification.confidence * 100)}% pattern confidence
                   </p>
+                  {comment.ai_review && (
+                    <p className="mt-1 text-xs text-ink/70">
+                      AI:{" "}
+                      <span className={`font-medium ${TONE[comment.ai_review.category] || ""}`}>
+                        {AI_LABEL[comment.ai_review.category] || comment.ai_review.category}
+                      </span>{" "}
+                      · {Math.round(comment.ai_review.confidence * 100)}%
+                      {comment.ai_review.describes_order ? " · describes an order" : ""}
+                      {comment.ai_review.reason ? ` · ${comment.ai_review.reason}` : ""}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

@@ -57,6 +57,8 @@ from schemas import (
     SocialImportIn,
     SocialImportOut,
     SocialSyncOut,
+    TikTokLookupIn,
+    TikTokLookupOut,
     VendorCard,
     VendorDetail,
     VendorRegisterIn,
@@ -67,6 +69,7 @@ from schemas import (
 from reading import reading_lines
 from receipts import attach_receipt
 from scoring import legally_verified, score_vendor
+import tiktok as tiktok_lookup
 from social import comment_to_report, fetch_authorized_instagram, first_link, parse_whatsapp_messages, valid_whatsapp_signature
 from thrivewave import (
     HELP_TEXT,
@@ -824,6 +827,77 @@ def sync_social(db: Session = Depends(get_db)):
         username=username,
         vendor_id=vendor.id,
         message=f"Imported {imported} comment{'s' if imported != 1 else ''} from @{username}.",
+    )
+
+
+@app.post("/api/v1/tiktok/lookup", response_model=TikTokLookupOut)
+def tiktok_lookup_endpoint(payload: TikTokLookupIn, db: Session = Depends(get_db)):
+    """Shop details and a sample of comments for a TikTok shop, each comment classified.
+
+    Read-only unless save is true. Saving opens the shop (if new) and files the
+    comments as TikTok social comments, which follow the usual link rules.
+    """
+    handle = tiktok_lookup.parse_handle(payload.query)
+    if handle is None:
+        named = [v for v, field in search_vendors(db, payload.query) if field == "name" and v.tiktok]
+        if len(named) == 1:
+            handle = named[0].tiktok.lstrip("@").lower()
+    if handle is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Send the shop's TikTok link or @handle. A name only works for a shop already in VeriDuka with its TikTok set.",
+        )
+    try:
+        result = tiktok_lookup.lookup(handle, payload.videos, payload.comments_per_video)
+    except tiktok_lookup.TikTokError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    vendor = db.query(Vendor).filter(Vendor.tiktok == handle).first()
+    saved = 0
+    note = "Read only. Nothing was saved or scored."
+    if payload.save:
+        profile = result["profile"]
+        if vendor is None:
+            vendor = Vendor(
+                name=profile["nickname"][:160] or handle,
+                tiktok=handle,
+                category="TikTok shop",
+                location="Not on a registry",
+                about=profile["bio"][:500],
+                is_shadow=True,
+                kra_status="unverified",
+                brs_status="unverified",
+                mpesa_verified=False,
+                created_at=utcnow(),
+            )
+            db.add(vendor)
+            db.flush()
+        for comment in result["comments"]:
+            external_id = comment["external_id"]
+            if external_id and db.query(Report).filter(Report.external_id == external_id).first():
+                continue
+            db.add(
+                comment_to_report(
+                    vendor_id=vendor.id,
+                    platform="tiktok",
+                    text=comment["text"],
+                    author_handle=comment["author"],
+                    permalink=comment["video_url"],
+                    external_id=external_id,
+                )
+            )
+            saved += 1
+        db.commit()
+        note = f"Saved {saved} new comment{'s' if saved != 1 else ''} to {vendor.name}."
+    return TikTokLookupOut(
+        handle=handle,
+        profile=result["profile"],
+        videos=result["videos"],
+        comments=result["comments"],
+        summary=result["summary"],
+        vendor_id=vendor.id if vendor else None,
+        saved=saved,
+        note=note,
     )
 
 

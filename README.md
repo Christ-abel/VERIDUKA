@@ -249,6 +249,7 @@ The short-code check is the section above, "How an M-Pesa short code is checked"
 | `META_GRAPH_VERSION` | Graph API version, default `v21.0` |
 | `META_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized this app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Reserved for live registry clients |
+| `APIFY_TOKEN` | TikTok shop lookup. A token from console.apify.com. One lookup of 3 videos and 15 comments is about $0.02 of Apify credit, so the free plan covers many |
 | `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_ENVIRONMENT` | Daraja OAuth. `sandbox` or `production`. Both keys empty keeps the seeded badge |
 | `DARAJA_NAME_LOOKUP_URL` | Optional. Default `/mpesa/orginfo/v1/query` on the Safaricom host. Body `{"ShortCode":"<paybill>"}`. Name from `OrganizationName` or `MerchantName` |
 | `REVIEW_API_KEY` | When set, resolving a report or connecting WhatsApp requires this value in `X-Review-Key` |
@@ -279,3 +280,9 @@ docker compose up --build
 ```
 
 Open http://localhost:8000. The container serves the built dashboard and the API together. The database file is stored at `/data/veriduka.db`.
+
+## TikTok shop lookup
+
+Paste a shop's TikTok link or @handle into Check a TikTok shop on the home page, or call `POST /api/v1/tiktok/lookup` with `{"query": "@shopname"}`. VeriDuka runs two Apify actors (`clockworks/tiktok-profile-scraper`, `clockworks/tiktok-comments-scraper`) and returns the profile (bio, followers, verified, seller flag, link in bio), the latest videos, and a few comments, each run through the same classifier as buyer reports.
+
+A lookup only reads. Send `"save": true` (the Save button) to open the shop and file the comments as TikTok social comments, which follow the usual rules: a comment moves the score only with a public link and a clear pattern, and a repeated comment is skipped. A plain shop name works only for a shop already on file with its TikTok handle set. The lookup is capped at 5 videos and 10 comments per video, and takes from about half a minute to a few minutes.

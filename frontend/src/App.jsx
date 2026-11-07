@@ -4,6 +4,7 @@ import RegisterModal from "./components/RegisterModal";
 import ReportModal from "./components/ReportModal";
 import SearchBar from "./components/SearchBar";
 import SmsSimulator from "./components/SmsSimulator";
+import TikTokLookup from "./components/TikTokLookup";
 import VendorDossier from "./components/VendorDossier";
 import { formatPhone, handleOf, whatsappUrl } from "./format";
 
@@ -227,6 +228,14 @@ export default function App() {
               />
             )}
           </div>
+          {!vendor && !comparing && (
+            <TikTokLookup
+              onSaved={async (data) => {
+                await loadDirectory(query);
+                if (data.vendor_id) await openVendor(data.vendor_id);
+              }}
+            />
+          )}
           <footer className="mt-10 text-sm leading-relaxed text-ink/55">
             Scores are decision signals, not a promise of a perfect order. Confirm the till name inside M-Pesa before you pay.
             Legal checks use a mock BRS and KRA file so the prototype runs without government credentials.

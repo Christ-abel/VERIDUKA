@@ -413,3 +413,21 @@ class WhatsAppWebhookOut(BaseModel):
     received: int
     imported: int
     ignored: int
+
+
+class TikTokLookupIn(BaseModel):
+    query: str = Field(min_length=2, max_length=200, description="A TikTok link, @handle, or the name of a shop already in VeriDuka.")
+    videos: int = Field(default=3, ge=1, le=5)
+    comments_per_video: int = Field(default=5, ge=1, le=10)
+    save: bool = Field(default=False, description="Also save the shop and its comments. Off by default: a lookup only reads.")
+
+
+class TikTokLookupOut(BaseModel):
+    handle: str
+    profile: dict
+    videos: list[dict]
+    comments: list[dict]
+    summary: dict
+    vendor_id: int | None = None
+    saved: int = 0
+    note: str = ""

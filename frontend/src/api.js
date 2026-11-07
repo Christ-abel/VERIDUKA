@@ -32,6 +32,7 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  tiktokLookup: (body) => request("/api/v1/tiktok/lookup", { method: "POST", body: JSON.stringify(body) }),
   search: (query) => request(`/api/v1/search?query=${encodeURIComponent(query)}`),
   vendor: (id) => request(`/api/v1/vendor/${id}`),
   reading: (id) => request(`/api/v1/vendor/${id}/reading`),

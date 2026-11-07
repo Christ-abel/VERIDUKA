@@ -62,6 +62,8 @@ def _ensure_report_columns(db: Session) -> None:
         "permalink": "ALTER TABLE reports ADD COLUMN permalink VARCHAR(500)",
         "external_id": "ALTER TABLE reports ADD COLUMN external_id VARCHAR(80)",
         "score_eligible": "ALTER TABLE reports ADD COLUMN score_eligible BOOLEAN DEFAULT 1",
+        "resolved_by": "ALTER TABLE reports ADD COLUMN resolved_by VARCHAR(80)",
+        "resolved_at": "ALTER TABLE reports ADD COLUMN resolved_at DATETIME",
     }
     for name, statement in statements.items():
         if name not in present:

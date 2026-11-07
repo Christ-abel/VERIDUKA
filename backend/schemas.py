@@ -42,6 +42,30 @@ class ScoreOut(BaseModel):
     service_rating: dict
 
 
+class ReplyOut(BaseModel):
+    id: int
+    text: str
+    author: str
+    created_at: str
+
+
+class ReplyIn(BaseModel):
+    text: str = Field(min_length=2, max_length=1000)
+    author: str = Field(min_length=2, max_length=80, description="Who is replying, for example the shop name.")
+
+    @field_validator("text", "author")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if len(value) < 2:
+            raise ValueError("Enter at least 2 characters.")
+        return value
+
+
+class ResolveIn(BaseModel):
+    reviewer: str = Field(min_length=2, max_length=80, description="Who reviewed and accepted the resolution.")
+
+
 class ReportOut(BaseModel):
     id: int
     report_type: str
@@ -56,6 +80,9 @@ class ReportOut(BaseModel):
     user_phone_masked: str
     verified: bool
     resolved: bool
+    resolved_by: str | None = None
+    resolved_at: str | None = None
+    replies: list[ReplyOut] = []
     created_at: str
     impact: dict
     source: str = "buyer"

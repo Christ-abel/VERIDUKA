@@ -41,6 +41,7 @@ Copy `.env.example` to `.env`. Empty values keep the built-in mocks.
 | `THRIVEWAVE_API_KEY` and `THRIVEWAVE_LIVE=true` | Real SMS dispatch |
 | `META_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized the app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Live registry adapters, when those clients are added |
+| `REVIEW_API_KEY` | Required as `X-Review-Key` to mark a report resolved. Empty leaves the review action open for local use |
 | `DARAJA_CONSUMER_KEY` and `DARAJA_CONSUMER_SECRET` | Reserved for a Safaricom till-name check |
 
 ## Social comments
@@ -77,3 +78,7 @@ docker compose up --build
 ```
 
 Open http://localhost:8000. The database file is stored at `/data/veriduka.db`.
+
+## Merchant replies
+
+A shop can post a public reply on any report (`POST /api/v1/reports/{id}/replies`). A reply is shown with the complaint and never changes the score. A scam report stops costing points only after an explicit review action (`POST /api/v1/reports/{id}/resolve`), which records who resolved it and when.

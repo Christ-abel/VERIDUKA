@@ -58,9 +58,30 @@ class Report(Base):
     score_eligible: Mapped[bool] = mapped_column(Boolean, default=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    resolved_by: Mapped[str | None] = mapped_column(String(80))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     vendor: Mapped[Vendor] = relationship(back_populates="reports")
+    replies: Mapped[list["ReportReply"]] = relationship(
+        back_populates="report",
+        cascade="all, delete-orphan",
+        order_by="ReportReply.created_at",
+    )
+
+
+class ReportReply(Base):
+    """A public answer to a report. A reply never changes the score by itself."""
+
+    __tablename__ = "report_replies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("reports.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    author: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    report: Mapped[Report] = relationship(back_populates="replies")
 
 
 class OfficialRecord(Base):

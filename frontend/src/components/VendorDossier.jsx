@@ -222,6 +222,7 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
   const rows = [
     ["Trading phone", vendor.phone ? formatPhone(vendor.phone) : "None"],
     ["M-Pesa paybill", vendor.paybill || "None"],
+    ["Daraja till name", vendor.mpesa_till_name || "Not checked"],
     ["Instagram", vendor.instagram ? handleOf(vendor.instagram) : "None"],
     ["KRA PIN", vendor.kra_pin || "None on file"],
     ["KRA status", STATUS[vendor.kra_status] || vendor.kra_status],
@@ -254,6 +255,38 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
           </p>
         </div>
       )}
+      {vendor.mpesa_till_name && (
+        <p
+          role="status"
+          className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+            vendor.badges.mpesa_verified
+              ? "border-signal/30 bg-signal/10 text-ink"
+              : "border-noise/30 bg-noise/10 text-ink"
+          }`}
+        >
+          {vendor.mpesa_name_match === false ? (
+            <>
+              The M-Pesa till name <strong>{vendor.mpesa_till_name}</strong> does not match the registered
+              entity <strong>{vendor.official?.registered_name || "on file"}</strong>. The M-Pesa Verified
+              badge is off.
+            </>
+          ) : vendor.badges.mpesa_verified ? (
+            <>
+              The M-Pesa till name <strong>{vendor.mpesa_till_name}</strong> matches the registered entity.
+            </>
+          ) : vendor.mpesa_name_match === true ? (
+            <>
+              The M-Pesa till name matches <strong>{vendor.official?.registered_name}</strong>, but there is
+              no active or registered KRA/BRS record. The badge is off.
+            </>
+          ) : (
+            <>
+              Daraja reports <strong>{vendor.mpesa_till_name}</strong>, but there is no KRA/BRS entity on
+              file to compare it with. The badge is off.
+            </>
+          )}
+        </p>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -261,8 +294,11 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
           disabled={checking}
           className="rounded-full border border-ink px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
-          {checking ? "Checking registry…" : "Check mock registry"}
+          {checking ? "Checking…" : "Recheck legal details"}
         </button>
+        <p className="text-xs text-ink/55">
+          With Daraja configured, this also checks the paybill name against the registered entity.
+        </p>
         {message && <p className="text-sm text-ink/80">{message}</p>}
       </div>
     </div>

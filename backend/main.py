@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from classifier import CATEGORY_LABELS, classify_report
+from daraja import DarajaClient, DarajaError, daraja_credentials_configured, registered_names_match
 from database import (
     EXACT_FIELDS,
     AmbiguousIdentifier,
@@ -178,10 +179,17 @@ def profile_links(vendor: Vendor) -> dict[str, ProfileLink]:
 
 
 def badges_for(vendor: Vendor) -> dict:
+    mpesa_verified = bool(vendor.mpesa_verified)
+    if daraja_credentials_configured():
+        mpesa_verified = bool(
+            mpesa_verified
+            and vendor.mpesa_till_name
+            and vendor.mpesa_name_match is True
+        )
     return {
         "brs_registered": vendor.brs_status == "verified",
         "kra_active": vendor.kra_status == "verified",
-        "mpesa_verified": bool(vendor.mpesa_verified),
+        "mpesa_verified": mpesa_verified,
     }
 
 
@@ -233,7 +241,9 @@ def vendor_card(vendor: Vendor, score: dict, match_field: str) -> VendorCard:
         brs_number=vendor.brs_number,
         kra_status=vendor.kra_status,
         brs_status=vendor.brs_status,
-        mpesa_verified=bool(vendor.mpesa_verified),
+        mpesa_verified=badges_for(vendor)["mpesa_verified"],
+        mpesa_till_name=vendor.mpesa_till_name,
+        mpesa_name_match=vendor.mpesa_name_match,
         is_shadow=bool(vendor.is_shadow),
         match_field=match_field,
         score=score["score"],
@@ -640,6 +650,7 @@ def verify_legal(payload: LegalIn, db: Session = Depends(get_db)):
         message = f"Found {record.registered_name}. Submit the KRA PIN or BRS number to confirm it."
 
     vendor_updated = False
+    vendor = None
     if payload.vendor_id is not None:
         vendor = db.get(Vendor, payload.vendor_id)
         if vendor is None:
@@ -649,6 +660,50 @@ def verify_legal(payload: LegalIn, db: Session = Depends(get_db)):
             apply_record(vendor, record)
             vendor_updated = True
             db.commit()
+
+        if daraja_credentials_configured():
+            if not vendor.paybill:
+                vendor.mpesa_till_name = None
+                vendor.mpesa_name_match = None
+                vendor.mpesa_verified = False
+                mpesa_message = "M-Pesa verification was not run because no paybill is on file."
+            else:
+                try:
+                    till_name = DarajaClient().lookup_paybill_name(vendor.paybill)
+                except DarajaError as exc:
+                    raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+                registered_record = official_for(db, vendor)
+                vendor.mpesa_till_name = till_name
+                vendor.mpesa_name_match = (
+                    registered_names_match(till_name, registered_record.registered_name)
+                    if registered_record
+                    else None
+                )
+                vendor.mpesa_verified = bool(
+                    vendor.mpesa_name_match is True and legally_verified(vendor)
+                )
+                if registered_record is None:
+                    mpesa_message = (
+                        f"Daraja reports {till_name}, but no KRA/BRS entity is on file to compare it with."
+                    )
+                elif vendor.mpesa_name_match is False:
+                    mpesa_message = (
+                        f"Daraja reports {till_name}, which does not match registered entity "
+                        f"{registered_record.registered_name}. M-Pesa verification is off."
+                    )
+                elif not vendor.mpesa_verified:
+                    mpesa_message = (
+                        f"Daraja name matches {registered_record.registered_name}, but its KRA/BRS "
+                        "record is not active or registered. M-Pesa verification is off."
+                    )
+                else:
+                    mpesa_message = (
+                        f"Daraja name matches registered entity {registered_record.registered_name}. "
+                        "M-Pesa Verified."
+                    )
+            db.commit()
+            message = f"{message} {mpesa_message}"
 
     return LegalOut(
         found=record is not None,

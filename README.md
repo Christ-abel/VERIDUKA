@@ -115,7 +115,7 @@ ThriveWave carries the same check to a handset. The dashboard includes a phone s
 | Instagram, Facebook, and TikTok links | Live. The buyer opens the page. Comments are not imported |
 | Instagram sync | Optional code path only. The dashboard does not call it without a token |
 | BRS and KRA | Local mock of three official records. `KRA_*` and `BRS_*` are reserved for a real client |
-| M-Pesa till name | Badge is seeded. A Daraja name check is reserved |
+| M-Pesa till name | Seeded badge when Daraja keys are empty. With Daraja configured, a lookup must match the KRA/BRS registered name for the badge to show |
 | ThriveWave | Mock dispatch until `THRIVEWAVE_LIVE=true` |
 
 The mock registry includes a decoy company, Savanna Hardware Limited in Mombasa, so a PIN from one business is not stamped onto an unrelated shop.
@@ -220,6 +220,8 @@ Reporter phones are masked on the dossier (`07****01`). The shop's own phone is 
 
 Copy `.env.example` to `.env`. Empty values keep the built-in mocks. `.env` is gitignored.
 
+The Daraja till-name check uses OAuth and requires the name-inquiry endpoint to be enabled for your Daraja app. Recheck a vendor's legal details from the dossier to query its paybill. A badge is shown only when the returned name matches the official KRA/BRS registered name and that record is active or registered. When both consumer credentials are empty, the seeded M-Pesa badge behavior is unchanged.
+
 | Variable | What it unlocks |
 | --- | --- |
 | `PORT` | API port. Default `8000` |
@@ -229,7 +231,8 @@ Copy `.env.example` to `.env`. Empty values keep the built-in mocks. `.env` is g
 | `META_GRAPH_VERSION` | Graph API version, default `v21.0` |
 | `META_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized this app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Reserved for live registry clients |
-| `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_ENVIRONMENT` | Reserved for a Safaricom till-name check |
+| `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, `DARAJA_ENVIRONMENT` | Daraja OAuth credentials and environment (`sandbox` or `production`) |
+| `DARAJA_NAME_LOOKUP_URL` | Enabled Daraja name-inquiry endpoint. VeriDuka sends `POST {"ShortCode":"<paybill>"}` with a bearer token and expects `{"MerchantName":"<registered name>"}` |
 | `REVIEW_API_KEY` | When set, resolving a report or connecting WhatsApp requires this value in `X-Review-Key` |
 | `WHATSAPP_VERIFY_TOKEN` | Handshake token for a shop's own WhatsApp webhook. Empty disables the handshake |
 | `WHATSAPP_APP_SECRET` | When set, WhatsApp deliveries must carry a valid `X-Hub-Signature-256` |

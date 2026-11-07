@@ -68,13 +68,15 @@ A paybill or till is a number. The name on an Instagram page can be anything. **
 
 When both Daraja keys are empty, that call is skipped and the seeded badge stays. Nairobi Tech Hub Electronics keeps M-Pesa Verified in the demo for that reason. The demo paybills are not real Safaricom short codes, so a live lookup of `400200` cannot invent a match.
 
-On a fresh database the three seeded shops land at:
+On a fresh database the original three shops land at:
 
 | Shop | Score | Why |
 | --- | --- | --- |
 | Nairobi Tech Hub Electronics | 95 | 50, plus 25 for an active registry match, plus the +20 praise cap |
 | Mama Boaz Organic Veggies | 65 | 50, plus the +20 praise cap, minus 5 for an older late delivery. The registry file is pending |
 | Trendy Clothez Kenya | 25 | 50, minus 20 for an unresolved scam, minus 5 for a delivery complaint. Two spam texts are stored and ignored |
+
+Seventeen more shops are added on startup, including on a database that already has the first three. Together they show a matched KRA and BRS file, a pending PIN, a till name that matches, a till name that does not, a Swahili review, a public shop reply, and every score band.
 
 ## Public pages, not a social login
 
@@ -96,7 +98,7 @@ Choose **Register a shop** in the header, or text:
 REGISTER Kayole Greens, 0711222333, 556677
 ```
 
-The shop is added at a score of 50, with no KRA or BRS bonus. The form can also store Instagram, Facebook, and TikTok handles, which become the public links above. A paybill or phone that is already on file is refused, so a shop cannot register a second copy of an existing till.
+The form asks for the shop name, phone, paybill, KRA PIN, and BRS number. With no matching registry record the score starts at 50 and the PIN is kept on the legal tab. When the shop name matches the KRA or BRS record, that registration starts at 75. The form can also store Instagram, Facebook, and TikTok handles, which become the public links above. A paybill, phone, KRA PIN, or BRS number that is already on file is refused.
 
 A shop can also answer a report in public. The reply sits under the complaint. It does not change the score. A scam stops costing points only after a reviewer marks that report resolved.
 

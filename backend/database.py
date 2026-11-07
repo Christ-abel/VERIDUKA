@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import config  # noqa: F401  loads .env before the database URL is read
 from classifier import classify_report
-from models import Base, OfficialRecord, Report, Vendor
+from models import Base, OfficialRecord, Report, ReportReply, Vendor
 
 
 class AmbiguousIdentifier(Exception):
@@ -125,6 +125,7 @@ def init_db() -> None:
         db.commit()
         if db.query(Vendor).count() == 0:
             seed(db)
+        _ensure_showcase(db)
         _backfill_profiles(db)
     except Exception:
         db.rollback()
@@ -254,12 +255,18 @@ def create_registered_vendor(
     category: str = "General",
     location: str = "Kenya",
     about: str = "",
+    kra_pin: str | None = None,
+    brs_number: str | None = None,
 ) -> Vendor:
-    """A shop filing itself. Legal status stays unverified until a registry check."""
+    """A shop filing itself. A matching registry record can be applied by the caller."""
     if paybill and db.query(Vendor).filter(Vendor.paybill == paybill).first():
         raise DuplicateShop("paybill")
     if phone and db.query(Vendor).filter(Vendor.phone == phone).first():
         raise DuplicateShop("phone")
+    if kra_pin and db.query(Vendor).filter(Vendor.kra_pin == kra_pin).first():
+        raise DuplicateShop("kra_pin")
+    if brs_number and db.query(Vendor).filter(Vendor.brs_number == brs_number).first():
+        raise DuplicateShop("brs_number")
     vendor = Vendor(
         name=" ".join(name.split())[:160],
         phone=phone,
@@ -270,6 +277,8 @@ def create_registered_vendor(
         category=(category or "General")[:80],
         location=(location or "Kenya")[:120],
         about=(" ".join(about.split()) if about else "Registered by the shop. No legal record is linked yet.")[:1000],
+        kra_pin=kra_pin,
+        brs_number=brs_number,
         mpesa_verified=False,
         kra_status="unverified",
         brs_status="unverified",
@@ -334,26 +343,26 @@ def _add_report(
     phone: str,
     proof: str | None,
     verified_hint: bool,
-) -> None:
+) -> Report:
     result = classify_report(description, report_type)
     verified = bool(verified_hint and result.category == "POSITIVE" and not result.is_false_report)
-    db.add(
-        Report(
-            vendor=vendor,
-            report_type=report_type,
-            ai_category=result.category,
-            ai_confidence=result.confidence,
-            ai_reasons=json.dumps(result.reasons),
-            sentiment=result.sentiment,
-            is_false_report=result.is_false_report,
-            description=description,
-            proof_url=proof,
-            user_phone=normalize_phone(phone) or phone,
-            verified=verified,
-            resolved=False,
-            created_at=utcnow() - timedelta(days=days_ago, hours=4),
-        )
+    report = Report(
+        vendor=vendor,
+        report_type=report_type,
+        ai_category=result.category,
+        ai_confidence=result.confidence,
+        ai_reasons=json.dumps(result.reasons),
+        sentiment=result.sentiment,
+        is_false_report=result.is_false_report,
+        description=description,
+        proof_url=proof,
+        user_phone=normalize_phone(phone) or phone,
+        verified=verified,
+        resolved=False,
+        created_at=utcnow() - timedelta(days=days_ago, hours=4),
     )
+    db.add(report)
+    return report
 
 
 def seed(db: Session) -> None:
@@ -570,3 +579,91 @@ def seed(db: Session) -> None:
         proof=None,
         verified_hint=False,
     )
+
+
+def _shop_already_listed(db: Session, *, name: str, phone: str | None, paybill: str | None, kra_pin: str | None) -> bool:
+    if db.query(Vendor).filter(Vendor.name == name).first():
+        return True
+    if phone and db.query(Vendor).filter(Vendor.phone == phone).first():
+        return True
+    if paybill and db.query(Vendor).filter(Vendor.paybill == paybill).first():
+        return True
+    if kra_pin and db.query(Vendor).filter(Vendor.kra_pin == kra_pin).first():
+        return True
+    return False
+
+
+def _ensure_showcase(db: Session) -> None:
+    """Add the judge directory without cloning a shop that is already on file.
+
+    Runs on every startup, including a database that already holds the first
+    three shops. A later start finds the paybill or PIN and skips that row.
+    """
+    from showcase import SHOWCASE_RECORDS, SHOWCASE_SHOPS
+
+    for pin, brs, registered_name, kra_status, brs_status, county, registered_on in SHOWCASE_RECORDS:
+        if db.query(OfficialRecord).filter(OfficialRecord.kra_pin == pin).first():
+            continue
+        if db.query(OfficialRecord).filter(OfficialRecord.brs_number == brs).first():
+            continue
+        db.add(
+            OfficialRecord(
+                kra_pin=pin,
+                brs_number=brs,
+                registered_name=registered_name,
+                kra_status=kra_status,
+                brs_status=brs_status,
+                county=county,
+                entity_type="private_company" if brs.startswith("PVT") else "business_name",
+                registered_on=registered_on,
+            )
+        )
+    db.flush()
+
+    for shop in SHOWCASE_SHOPS:
+        phone = normalize_phone(shop["phone"])
+        if _shop_already_listed(db, name=shop["name"], phone=phone, paybill=shop["paybill"], kra_pin=shop["kra_pin"]):
+            continue
+        vendor = Vendor(
+            name=shop["name"],
+            phone=phone,
+            paybill=shop["paybill"],
+            instagram=shop["instagram"],
+            facebook=shop["name"].replace(" ", ""),
+            tiktok=shop["instagram"],
+            kra_pin=shop["kra_pin"],
+            brs_number=shop["brs_number"],
+            category=shop["category"],
+            location=shop["location"],
+            about=shop["about"],
+            mpesa_verified=shop["mpesa_verified"],
+            mpesa_till_name=shop["mpesa_till_name"],
+            mpesa_name_match=shop["mpesa_name_match"],
+            kra_status=shop["kra_status"],
+            brs_status=shop["brs_status"],
+            is_shadow=False,
+            created_at=utcnow() - timedelta(days=180),
+        )
+        db.add(vendor)
+        db.flush()
+        for report_type, days_ago, description, reporter, proof, reply in shop["reports"]:
+            saved = _add_report(
+                db,
+                vendor,
+                days_ago=days_ago,
+                report_type=report_type,
+                description=description,
+                phone=reporter,
+                proof=proof,
+                verified_hint=report_type == "POSITIVE",
+            )
+            if reply and saved is not None:
+                db.add(
+                    ReportReply(
+                        report=saved,
+                        text=reply,
+                        author=vendor.name,
+                        created_at=utcnow() - timedelta(days=max(days_ago - 1, 1)),
+                    )
+                )
+    db.commit()

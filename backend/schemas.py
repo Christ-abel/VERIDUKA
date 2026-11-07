@@ -278,6 +278,8 @@ class VendorRegisterIn(BaseModel):
     category: str = Field(default="General", max_length=80)
     location: str = Field(default="Kenya", max_length=120)
     about: str = Field(default="", max_length=1000)
+    kra_pin: str | None = None
+    brs_number: str | None = Field(default=None, max_length=40)
 
     @field_validator("name", "category", "location", "about")
     @classmethod
@@ -300,6 +302,26 @@ class VendorRegisterIn(BaseModel):
         if not re.fullmatch(r"\d{5,7}", digits):
             raise ValueError("Paybill must be 5 to 7 digits.")
         return digits
+
+    @field_validator("kra_pin")
+    @classmethod
+    def clean_pin(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
+        pin = re.sub(r"[^A-Za-z0-9]", "", value).upper()
+        if not re.fullmatch(r"[A-Z]\d{9}[A-Z]", pin):
+            raise ValueError("A KRA PIN looks like A123456789Z.")
+        return pin
+
+    @field_validator("brs_number")
+    @classmethod
+    def clean_brs(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
+        brs = " ".join(str(value).split()).upper()
+        if not re.fullmatch(r"(?:PVT|BN|CPR|LLP)[-/A-Z0-9]+", brs):
+            raise ValueError("A BRS number looks like PVT-9X2K41 or BN-2024-330191.")
+        return brs
 
     @field_validator("instagram", "facebook", "tiktok")
     @classmethod

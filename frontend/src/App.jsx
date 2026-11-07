@@ -5,7 +5,14 @@ import ReportModal from "./components/ReportModal";
 import SearchBar from "./components/SearchBar";
 import SmsSimulator from "./components/SmsSimulator";
 import VendorDossier from "./components/VendorDossier";
-import { formatPhone, handleOf } from "./format";
+import { formatPhone, handleOf, whatsappUrl } from "./format";
+
+const BANDS = [
+  { id: "", label: "All shops" },
+  { id: "VERIFIED_SIGNAL", label: "Verified signal" },
+  { id: "MODERATE_RISK", label: "Moderate risk" },
+  { id: "HIGH_NOISE", label: "Fraud alert" },
+];
 
 export default function App() {
   const [query, setQuery] = useState("");
@@ -17,6 +24,11 @@ export default function App() {
   const [missing, setMissing] = useState("");
   const [reportSeed, setReportSeed] = useState(null);
   const [registering, setRegistering] = useState(false);
+  const [band, setBand] = useState("");
+  const [picked, setPicked] = useState([]);
+  const [comparing, setComparing] = useState(false);
+  const [smsJob, setSmsJob] = useState(null);
+  const smsJobId = useRef(0);
   const explicit = useRef(false);
   const requestId = useRef(0);
 
@@ -96,6 +108,25 @@ export default function App() {
     setReportSeed(seed);
   }
 
+  function queueSms(text) {
+    smsJobId.current += 1;
+    setSmsJob({ id: smsJobId.current, text });
+  }
+
+  function togglePick(shop) {
+    setPicked((current) => {
+      if (current.some((item) => item.id === shop.id)) return current.filter((item) => item.id !== shop.id);
+      if (current.length >= 3) return current;
+      return [...current, shop];
+    });
+  }
+
+  function chooseBand(next) {
+    setBand(next);
+    setVendor(null);
+    setComparing(false);
+  }
+
   return (
     <div className="min-h-screen text-ink">
       <header className="border-b border-white/10 bg-deep text-[#f3ecdf]">
@@ -127,8 +158,8 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:px-6">
-        <section>
+      <main className="mx-auto grid min-w-0 max-w-6xl items-start gap-8 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:px-6">
+        <section className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-signal">Noise vs signal</p>
           <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.08] text-ink sm:text-5xl">
             VeriDuka. Filter out online shopping noise with verified trust signals
@@ -137,7 +168,7 @@ export default function App() {
             Ghost shops hide behind new Instagram accounts, borrowed paybills, and reviews that never describe an order.
             VeriDuka reads the legal record and the buyer reports that do.
           </p>
-          <SignalCompare />
+          <SignalCompare onPick={chooseBand} active={band} />
           <SearchBar
             value={query}
             onChange={setQuery}
@@ -161,6 +192,7 @@ export default function App() {
                 vendor={vendor}
                 onBack={() => setVendor(null)}
                 onChanged={refreshVendor}
+                onSms={queueSms}
                 onReport={() =>
                   openReport({
                     vendorId: vendor.id,
@@ -169,9 +201,24 @@ export default function App() {
                   })
                 }
               />
+            ) : comparing ? (
+              <CompareBoard
+                shops={picked}
+                onClose={() => setComparing(false)}
+                onOpen={(id) => {
+                  setComparing(false);
+                  openVendor(id);
+                }}
+              />
             ) : (
               <Directory
                 shops={directory}
+                band={band}
+                onBand={chooseBand}
+                picked={picked}
+                onToggle={togglePick}
+                onCompare={() => setComparing(true)}
+                onClear={() => setPicked([])}
                 booting={booting}
                 query={query}
                 missing={missing}
@@ -186,8 +233,8 @@ export default function App() {
             Legal checks use a mock BRS and KRA file so the prototype runs without government credentials.
           </footer>
         </section>
-        <div className="lg:sticky lg:top-6">
-          <SmsSimulator />
+        <div className="min-w-0 lg:sticky lg:top-6">
+          <SmsSimulator job={smsJob} />
         </div>
       </main>
 
@@ -218,16 +265,64 @@ export default function App() {
   );
 }
 
-function Directory({ shops, booting, query, missing, onOpen, onReportUnknown, suppressEmpty }) {
+function Directory({
+  shops,
+  band,
+  onBand,
+  picked,
+  onToggle,
+  onCompare,
+  onClear,
+  booting,
+  query,
+  missing,
+  onOpen,
+  onReportUnknown,
+  suppressEmpty,
+}) {
   if (booting) {
     return <p className="text-sm text-ink/60">Opening the signal room…</p>;
   }
+  const visible = shops.filter((shop) => !band || shop.band === band);
   return (
     <div>
-      <div className="mb-4 flex items-end justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <h2 className="font-display text-3xl">{query.trim() ? "Matches" : "Shops on file"}</h2>
-        <p className="text-sm text-ink/50">{shops.length} signal{shops.length === 1 ? "" : "s"}</p>
+        <p className="text-sm text-ink/50">{visible.length} signal{visible.length === 1 ? "" : "s"}</p>
       </div>
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by band">
+        {BANDS.map((item) => (
+          <button
+            key={item.id || "all"}
+            type="button"
+            aria-pressed={band === item.id}
+            onClick={() => onBand(item.id)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+              band === item.id ? "border-ink bg-ink text-paper" : "border-line bg-card text-ink/75"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {picked.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-card px-4 py-3">
+          <p className="text-sm text-ink/75">{picked.length} selected. Compare up to 3 shops on one poster.</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClear} className="rounded-full px-3 py-1.5 text-sm text-ink/60">
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={onCompare}
+              disabled={picked.length < 2}
+              className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-paper disabled:opacity-40"
+            >
+              Compare
+            </button>
+          </div>
+        </div>
+      )}
       {missing && (
         <div className="mb-4 rounded-[24px] border border-noise/30 bg-[#f8e4df] p-4">
           <p className="font-semibold text-noise">No trusted record for {missing}.</p>
@@ -239,57 +334,115 @@ function Directory({ shops, booting, query, missing, onOpen, onReportUnknown, su
           </button>
         </div>
       )}
-        {shops.length === 0 && !missing && !suppressEmpty && (
+        {visible.length === 0 && !missing && !suppressEmpty && (
         <p className="rounded-2xl bg-card px-4 py-6 text-sm text-ink/70">No shop matches that yet. Check the spelling, or file a report.</p>
       )}
       <div className="grid gap-3">
-        {shops.map((shop) => (
-          <ShopCard key={shop.id} shop={shop} onOpen={() => onOpen(shop.id)} />
+        {visible.map((shop) => (
+          <ShopCard
+            key={shop.id}
+            shop={shop}
+            picked={picked.some((item) => item.id === shop.id)}
+            onOpen={() => onOpen(shop.id)}
+            onToggle={() => onToggle(shop)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function ShopCard({ shop, onOpen }) {
+function ShopCard({ shop, picked, onOpen, onToggle }) {
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-full rounded-[24px] border border-line bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-ink/20"
-    >
+    <article className={`rounded-[24px] border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 ${picked ? "border-signal ring-2 ring-signal/30" : "border-line hover:border-ink/20"}`}>
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <p className="text-xs uppercase tracking-[0.14em] text-ink/45">
             {shop.category}
             {shop.match_field !== "directory" && shop.match_field !== "name" ? `, matched ${shop.match_field.replace("_", " ")}` : ""}
           </p>
           <h3 className="mt-1 font-display text-2xl leading-tight">{shop.name}</h3>
           <p className="mt-1 text-sm text-ink/65">{shop.location}</p>
-        </div>
-        <div className="text-right">
+        </button>
+        <button type="button" onClick={onOpen} className="text-right">
           <p className={`font-display text-4xl leading-none ${shop.band === "VERIFIED_SIGNAL" ? "text-signal" : shop.band === "MODERATE_RISK" ? "text-caution" : "text-noise"}`}>{shop.score}</p>
           <p className="mt-1 max-w-28 text-[11px] font-semibold uppercase tracking-wide text-ink/50">{shop.label}</p>
-        </div>
+        </button>
       </div>
-      <p className="mt-3 text-sm text-ink/70">
-        {[
-          shop.paybill ? `Paybill ${shop.paybill}` : null,
-          shop.phone ? formatPhone(shop.phone) : null,
-          shop.instagram ? handleOf(shop.instagram) : null,
-          shop.kra_pin || null,
-        ]
-          .filter(Boolean)
-          .join(", ")}
-      </p>
-    </button>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink/70">
+          {[
+            shop.paybill ? `Paybill ${shop.paybill}` : null,
+            shop.phone ? formatPhone(shop.phone) : null,
+            shop.instagram ? handleOf(shop.instagram) : null,
+            shop.kra_pin || null,
+          ]
+            .filter(Boolean)
+            .join(", ")}
+        </p>
+        <button
+          type="button"
+          aria-pressed={picked}
+          onClick={onToggle}
+          className={`rounded-full border px-3 py-1 text-xs font-semibold ${picked ? "border-signal bg-signal/10 text-signal" : "border-line text-ink/70"}`}
+        >
+          {picked ? "Selected" : "Compare"}
+        </button>
+      </div>
+    </article>
   );
 }
 
-function SignalCompare() {
+function CompareBoard({ shops, onClose, onOpen }) {
+  const best = Math.max(...shops.map((shop) => shop.score));
+  return (
+    <div>
+      <button type="button" onClick={onClose} className="text-sm font-medium text-signal hover:underline">
+        Back to the list
+      </button>
+      <h2 className="mt-3 font-display text-3xl">Side by side</h2>
+      <p className="mt-1 text-sm text-ink/65">The higher score is the stronger signal. Read the advice before you pay.</p>
+      <div className={`mt-4 grid gap-3 ${shops.length > 2 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+        {shops.map((shop) => {
+          const chat = whatsappUrl(
+            shop.phone,
+            `I compared shops on VeriDuka. ${shop.name} scores ${shop.score}. Is this paybill still yours?`,
+          );
+          return (
+            <article key={shop.id} className={`rounded-[24px] border bg-card p-4 ${shop.score === best ? "border-signal" : "border-line"}`}>
+              <p className="text-xs uppercase tracking-[0.14em] text-ink/45">{shop.score === best ? "Stronger signal" : shop.category}</p>
+              <h3 className="mt-1 font-display text-2xl leading-tight">{shop.name}</h3>
+              <p className={`mt-2 font-display text-5xl ${shop.band === "VERIFIED_SIGNAL" ? "text-signal" : shop.band === "MODERATE_RISK" ? "text-caution" : "text-noise"}`}>{shop.score}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">{shop.label}</p>
+              <p className="mt-3 text-sm leading-relaxed text-ink/75">{shop.advice}</p>
+              <ul className="mt-3 space-y-1 text-sm text-ink/70">
+                <li>{shop.paybill ? `Paybill ${shop.paybill}` : "No paybill"}</li>
+                <li>{shop.kra_status === "verified" ? "Active KRA" : "KRA not active"}</li>
+                <li>{shop.brs_status === "verified" ? "BRS registered" : "BRS not registered"}</li>
+                <li>{shop.mpesa_verified ? "M-Pesa verified" : "M-Pesa not verified"}</li>
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => onOpen(shop.id)} className="rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-paper">
+                  Open
+                </button>
+                {chat && (
+                  <a href={chat} target="_blank" rel="noreferrer" className="rounded-full border border-ink px-3 py-1.5 text-sm font-semibold">
+                    WhatsApp
+                  </a>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SignalCompare({ onPick, active }) {
   return (
     <div className="mt-6 grid max-w-xl grid-cols-2 gap-4">
-      <div>
+      <button type="button" onClick={() => onPick(active === "HIGH_NOISE" ? "" : "HIGH_NOISE")} className={`rounded-2xl p-2 text-left ${active === "HIGH_NOISE" ? "bg-noise/10" : ""}`}>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-noise">Noise</p>
         <div className="mt-2 flex h-14 items-end gap-1" aria-hidden="true">
           {[30, 80, 20, 90, 40, 70, 25, 85].map((height, index) => (
@@ -301,8 +454,8 @@ function SignalCompare() {
           ))}
         </div>
         <p className="mt-2 text-sm text-ink/65">Fake praise, unverified tills, shops that vanish after payment.</p>
-      </div>
-      <div>
+      </button>
+      <button type="button" onClick={() => onPick(active === "VERIFIED_SIGNAL" ? "" : "VERIFIED_SIGNAL")} className={`rounded-2xl p-2 text-left ${active === "VERIFIED_SIGNAL" ? "bg-signal/10" : ""}`}>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-signal">Signal</p>
         <div className="mt-2 flex h-14 items-end gap-1" aria-hidden="true">
           {[45, 62, 78, 90, 84, 96, 88, 100].map((height, index) => (
@@ -314,7 +467,7 @@ function SignalCompare() {
           ))}
         </div>
         <p className="mt-2 text-sm text-ink/65">KRA, BRS, and reports that describe a real order.</p>
-      </div>
+      </button>
     </div>
   );
 }

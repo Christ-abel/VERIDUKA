@@ -11,7 +11,7 @@ const PRESETS = [
 
 let messageId = 1;
 
-export default function SmsSimulator() {
+export default function SmsSimulator({ job }) {
   const [draft, setDraft] = useState("VERIFY 400200");
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState([
@@ -23,11 +23,18 @@ export default function SmsSimulator() {
     },
   ]);
   const threadRef = useRef(null);
+  const seenJob = useRef(0);
 
   useEffect(() => {
     const node = threadRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [messages, busy]);
+
+  useEffect(() => {
+    if (!job || job.id === seenJob.current || busy) return;
+    seenJob.current = job.id;
+    send(job.text);
+  }, [job, busy]);
 
   async function send(text) {
     const outbound = text.trim();

@@ -72,10 +72,13 @@ def _ensure_report_columns(db: Session) -> None:
         "score_eligible": "ALTER TABLE reports ADD COLUMN score_eligible BOOLEAN DEFAULT 1",
         "resolved_by": "ALTER TABLE reports ADD COLUMN resolved_by VARCHAR(80)",
         "resolved_at": "ALTER TABLE reports ADD COLUMN resolved_at DATETIME",
+        "receipt_hash": "ALTER TABLE reports ADD COLUMN receipt_hash VARCHAR(64)",
+        "ineligible_reason": "ALTER TABLE reports ADD COLUMN ineligible_reason TEXT",
     }
     for name, statement in statements.items():
         if name not in present:
             db.execute(text(statement))
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_reports_receipt_hash ON reports (receipt_hash)"))
     db.commit()
 
 

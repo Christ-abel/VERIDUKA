@@ -66,6 +66,10 @@ class Report(Base):
     permalink: Mapped[str | None] = mapped_column(String(500))
     external_id: Mapped[str | None] = mapped_column(String(80), index=True)
     score_eligible: Mapped[bool] = mapped_column(Boolean, default=True)
+    # SHA-256 of an M-Pesa confirmation code pasted into the report. The raw code is not stored here.
+    receipt_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Why a saved report was kept out of the score. Empty when the report can still count.
+    ineligible_reason: Mapped[str | None] = mapped_column(Text)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
     resolved_by: Mapped[str | None] = mapped_column(String(80))

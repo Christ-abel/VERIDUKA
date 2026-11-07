@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from classifier import CATEGORY_LABELS, classify_report
 from database import EXACT_FIELDS, AmbiguousIdentifier, get_db, init_db, resolve_identifier, search_vendors, utcnow
-from models import OfficialRecord, Report, SmsLog, Vendor
+from models import OfficialRecord, Report, ReportReply, SmsLog, Vendor
 from schemas import (
     ClassifyIn,
     ClassifyOut,
@@ -23,8 +24,11 @@ from schemas import (
     LegalOut,
     OfficialOut,
     ReportCreated,
+    ReplyIn,
+    ReplyOut,
     ReportIn,
     ReportOut,
+    ResolveIn,
     ScoreOut,
     SearchOut,
     SmsOut,
@@ -208,6 +212,10 @@ def official_out(row: OfficialRecord | None) -> OfficialOut | None:
     )
 
 
+def reply_out(reply: ReportReply) -> ReplyOut:
+    return ReplyOut(id=reply.id, text=reply.text, author=reply.author, created_at=iso(reply.created_at))
+
+
 def report_out(report: Report, impact: dict) -> ReportOut:
     try:
         reasons = json.loads(report.ai_reasons or "[]")
@@ -227,6 +235,9 @@ def report_out(report: Report, impact: dict) -> ReportOut:
         user_phone_masked=mask_phone(report.user_phone),
         verified=bool(report.verified),
         resolved=bool(report.resolved),
+        resolved_by=report.resolved_by,
+        resolved_at=iso(report.resolved_at) if report.resolved_at else None,
+        replies=[reply_out(reply) for reply in report.replies],
         created_at=iso(report.created_at),
         impact=impact,
         source=report.source or "buyer",
@@ -432,6 +443,49 @@ def create_report(payload: ReportIn, db: Session = Depends(get_db)):
         band=score["band"],
         label=score["label"],
     )
+
+
+@app.post("/api/v1/reports/{report_id}/replies", response_model=ReplyOut, status_code=201)
+def reply_to_report(report_id: int, payload: ReplyIn, db: Session = Depends(get_db)):
+    """Attach a public reply. It is shown with the complaint and never changes the score."""
+    report = db.get(Report, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="No report with that id.")
+    reply = ReportReply(report_id=report.id, text=payload.text, author=payload.author, created_at=utcnow())
+    db.add(reply)
+    db.commit()
+    db.refresh(reply)
+    return reply_out(reply)
+
+
+@app.post("/api/v1/reports/{report_id}/resolve", response_model=ReportOut)
+def resolve_report(
+    report_id: int,
+    payload: ResolveIn,
+    db: Session = Depends(get_db),
+    review_key: str | None = Header(default=None, alias="X-Review-Key"),
+):
+    """Explicit review action. Only this endpoint stops a scam report from costing points.
+
+    When REVIEW_API_KEY is set the caller must send it as X-Review-Key, so a
+    shop cannot resolve its own complaint. Without it the endpoint is open,
+    which is fine for local development only.
+    """
+    expected = os.getenv("REVIEW_API_KEY", "")
+    if expected and review_key != expected:
+        raise HTTPException(status_code=403, detail="A valid review key is required to resolve a report.")
+    report = db.get(Report, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="No report with that id.")
+    if not report.resolved:
+        report.resolved = True
+        report.resolved_by = payload.reviewer
+        report.resolved_at = utcnow()
+        db.commit()
+        db.refresh(report)
+    score = score_vendor(report.vendor, load_reports(db, report.vendor_id))
+    impact = score["impacts"].get(report.id, {})
+    return report_out(report, impact)
 
 
 @app.post("/api/v1/verify-legal", response_model=LegalOut)

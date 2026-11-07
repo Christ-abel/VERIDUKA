@@ -197,6 +197,8 @@ The first API start creates `backend/veriduka.db` and seeds the three shops. Del
 
 Reporter phones are masked on the dossier (`07****01`). The shop's own phone is shown in full, because that is how buyers reach it.
 
+Start at 50. Active KRA or registered BRS adds 25. Each verified positive review adds 5, capped at 20. Each unresolved scam removes 20. Each delivery or service complaint removes 5. A negative report newer than 30 days counts double. The first report from a phone in a seven-day window gets full weight; further reports from that phone get 25% weight. A report from the shop's own registered phone gets zero weight. Reporter phones are stored as SHA-256 fingerprints plus the existing masked display, never as full numbers. The gauge rounds and clamps the total to 0–100.
+
 ## API
 
 | Method | Path | Purpose |

@@ -59,7 +59,8 @@ class Report(Base):
     is_false_report: Mapped[bool] = mapped_column(Boolean, default=False)
     description: Mapped[str] = mapped_column(Text)
     proof_url: Mapped[str | None] = mapped_column(String(500))
-    user_phone: Mapped[str] = mapped_column(String(20), default="")
+    reporter_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    reporter_phone_masked: Mapped[str] = mapped_column(String(16), default="hidden")
     source: Mapped[str] = mapped_column(String(24), default="buyer")
     platform: Mapped[str | None] = mapped_column(String(24))
     author_handle: Mapped[str | None] = mapped_column(String(80))
@@ -82,6 +83,14 @@ class Report(Base):
         cascade="all, delete-orphan",
         order_by="ReportReply.created_at",
     )
+
+    @property
+    def user_phone(self) -> str:
+        return ""
+
+    @user_phone.setter
+    def user_phone(self, _value: str) -> None:
+        pass
 
 
 class ReportReply(Base):

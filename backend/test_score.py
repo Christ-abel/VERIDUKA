@@ -13,17 +13,29 @@ from __future__ import annotations
 import unittest
 from datetime import timedelta
 
+from reporter_privacy import reporter_fingerprint
 from scoring import score_vendor, utcnow
 
 
 class Shop:
-    def __init__(self, kra_status="unverified", brs_status="unverified"):
+    def __init__(self, kra_status="unverified", brs_status="unverified", phone=None):
         self.kra_status = kra_status
         self.brs_status = brs_status
+        self.phone = phone
 
 
 class Report:
-    def __init__(self, report_id, category, *, days_ago=10, verified=True, confidence=0.9, eligible=True):
+    def __init__(
+        self,
+        report_id,
+        category,
+        *,
+        days_ago=10,
+        verified=True,
+        confidence=0.9,
+        eligible=True,
+        reporter_phone=None,
+    ):
         self.id = report_id
         self.report_type = category
         self.ai_category = category
@@ -33,6 +45,7 @@ class Report:
         self.resolved = False
         self.score_eligible = eligible
         self.created_at = utcnow() - timedelta(days=days_ago)
+        self.reporter_hash = reporter_fingerprint(reporter_phone)
 
 
 class ScoreTests(unittest.TestCase):
@@ -65,6 +78,31 @@ class ScoreTests(unittest.TestCase):
         self.assertEqual(score["service_points"], -5)
         self.assertEqual(score["false_count"], 1)
         self.assertEqual(score["score"], 5)
+
+    def test_independent_complaints_outweigh_a_repeat_reporter(self):
+        independent = [
+            Report(index, "POOR_SERVICE", days_ago=1, reporter_phone=f"07123456{index:02d}")
+            for index in range(1, 6)
+        ]
+        repeated = [
+            Report(index, "POOR_SERVICE", days_ago=1, reporter_phone="0712345678")
+            for index in range(1, 6)
+        ]
+
+        independent_score = score_vendor(Shop(), independent)
+        repeated_score = score_vendor(Shop(), repeated)
+
+        self.assertEqual(independent_score["score"], 0)
+        self.assertEqual(repeated_score["score"], 30)
+        self.assertEqual(repeated_score["impacts"][2]["reporter_weight"], 0.25)
+
+    def test_shop_phone_report_has_no_score_impact(self):
+        report = Report(1, "SCAM", days_ago=1, reporter_phone="0712345678")
+
+        score = score_vendor(Shop(phone="254712345678"), [report])
+
+        self.assertEqual(score["score"], 50)
+        self.assertEqual(score["impacts"][1]["reporter_weight"], 0)
 
     def test_seed_shapes(self):
         """The three demo shops, reduced to the points that produce 95, 65, and 25."""

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import config  # noqa: F401  loads .env before the database URL is read
 from classifier import classify_report
 from models import Base, OfficialRecord, Report, Vendor
+from reporter_privacy import masked_reporter_phone, reporter_fingerprint
 
 
 class AmbiguousIdentifier(Exception):
@@ -74,13 +75,35 @@ def _ensure_report_columns(db: Session) -> None:
         "resolved_at": "ALTER TABLE reports ADD COLUMN resolved_at DATETIME",
         "receipt_hash": "ALTER TABLE reports ADD COLUMN receipt_hash VARCHAR(64)",
         "ineligible_reason": "ALTER TABLE reports ADD COLUMN ineligible_reason TEXT",
+        "reporter_hash": "ALTER TABLE reports ADD COLUMN reporter_hash VARCHAR(64)",
+        "reporter_phone_masked": "ALTER TABLE reports ADD COLUMN reporter_phone_masked VARCHAR(16) DEFAULT 'hidden'",
     }
     for name, statement in statements.items():
         if name not in present:
             db.execute(text(statement))
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_reports_receipt_hash ON reports (receipt_hash)"))
+    if "user_phone" in present:
+        for report_id, phone, fingerprint, masked in db.execute(
+            text("SELECT id, user_phone, reporter_hash, reporter_phone_masked FROM reports")
+        ):
+            if phone:
+                db.execute(
+                    text(
+                        "UPDATE reports SET reporter_hash = :fingerprint, "
+                        "reporter_phone_masked = :masked, user_phone = '' WHERE id = :report_id"
+                    ),
+                    {
+                        "fingerprint": fingerprint or reporter_fingerprint(phone),
+                        "masked": masked or masked_reporter_phone(phone),
+                        "report_id": report_id,
+                    },
+                )
+            elif not masked:
+                db.execute(
+                    text("UPDATE reports SET reporter_phone_masked = 'hidden' WHERE id = :report_id"),
+                    {"report_id": report_id},
+                )
     db.commit()
-
 
 def _ensure_vendor_columns(db: Session) -> None:
     """Add public-page and WhatsApp columns on a database created before those fields existed."""
@@ -346,7 +369,8 @@ def _add_report(
             is_false_report=result.is_false_report,
             description=description,
             proof_url=proof,
-            user_phone=normalize_phone(phone) or phone,
+            reporter_hash=reporter_fingerprint(phone),
+            reporter_phone_masked=masked_reporter_phone(phone),
             verified=verified,
             resolved=False,
             created_at=utcnow() - timedelta(days=days_ago, hours=4),

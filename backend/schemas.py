@@ -25,15 +25,15 @@ def canonical_phone(value: str) -> str:
 class ScoreOut(BaseModel):
     formula: str
     score: int
-    raw: int
+    raw: float
     band: str
     label: str
     advice: str
     base: int
     legal_points: int
-    positive_points: int
-    scam_points: int
-    service_points: int
+    positive_points: float
+    scam_points: float
+    service_points: float
     positive_count: int
     scam_count: int
     service_count: int

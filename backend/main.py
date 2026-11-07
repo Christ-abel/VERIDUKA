@@ -35,6 +35,7 @@ from database import (
     utcnow,
 )
 from models import OfficialRecord, Report, ReportReply, SmsCursor, SmsLog, Vendor
+from reporter_privacy import masked_reporter_phone, reporter_fingerprint
 from schemas import (
     canonical_phone,
     ClassifyIn,
@@ -286,7 +287,7 @@ def report_out(report: Report, impact: dict) -> ReportOut:
         reasons=reasons,
         description=report.description,
         proof_url=report.proof_url,
-        user_phone_masked=mask_phone(report.user_phone),
+        user_phone_masked=report.reporter_phone_masked or "hidden",
         verified=bool(report.verified),
         resolved=bool(report.resolved),
         resolved_by=report.resolved_by,
@@ -509,7 +510,8 @@ def create_report(payload: ReportIn, db: Session = Depends(get_db)):
         is_false_report=result.is_false_report,
         description=payload.description.strip(),
         proof_url=payload.proof_url,
-        user_phone=payload.user_phone,
+        reporter_hash=reporter_fingerprint(payload.user_phone),
+        reporter_phone_masked=masked_reporter_phone(payload.user_phone),
         verified=verified,
         resolved=False,
         source="buyer",

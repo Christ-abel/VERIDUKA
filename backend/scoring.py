@@ -13,6 +13,8 @@ It starts at 50 and moves like this:
 - Unresolved scam reports: -20 each
 - Non-delivery, delayed delivery, or poor service: -5 each
 - A negative report newer than 30 days counts double
+- A repeated reporter within seven days counts at 25% weight
+- A report from the shop's own phone has zero weight
 
 The result is clamped to 0 to 100. Praise does not get a recency bonus. Only
 penalties double, so a burst of fresh complaints is louder than old ones.
@@ -20,6 +22,9 @@ penalties double, so a burst of fresh complaints is louder than old ones.
 Instagram, Facebook, and TikTok URLs are not inputs. A buyer opens those
 pages and reads the reviews there. A comment moves this function only after
 someone files it as a report and the classifier keeps it.
+
+The score is rounded and clamped to 0–100. The first report in a seven-day
+window has full weight; additional reports from that reporter have 25% weight.
 """
 
 from __future__ import annotations
@@ -32,6 +37,8 @@ SERVICE_CATEGORIES = {
     "POOR_SERVICE",
     "BAD_SERVICE",
 }
+REPEAT_WINDOW = timedelta(days=7)
+REPEAT_REPORT_WEIGHT = 0.25
 
 BANDS = (
     (80, "VERIFIED_SIGNAL", "VERIFIED SIGNAL", "Safe to order via M-Pesa."),
@@ -91,82 +98,93 @@ def legally_verified(vendor) -> bool:
     return vendor.kra_status == "verified" or vendor.brs_status == "verified"
 
 
-def _impact(report, now: datetime) -> dict:
+def _impact(report, now: datetime, weight: float, weight_reason: str | None) -> dict:
     category = category_for_score(report)
     recent = is_recent(report.created_at, now)
     held = _held(report, category, recent)
     if held:
-        return held
-
-    if category == "SPAM" or report.is_false_report:
-        return {
+        impact = held
+    elif category == "SPAM" or report.is_false_report:
+        impact = {
             "points": 0,
             "counted": False,
             "category": "SPAM",
             "recent": recent,
             "reason": "Excluded. The text looks like spam or an unverifiable report.",
         }
-
-    if category == "POSITIVE":
+    elif category == "POSITIVE":
         if not report.verified:
-            return {
+            impact = {
                 "points": 0,
                 "counted": False,
                 "category": category,
                 "recent": recent,
                 "reason": "Listed, but praise needs a proof link before it moves the score.",
             }
-        return {
-            "points": 5,
-            "counted": True,
-            "in_rating": True,
-            "category": category,
-            "recent": recent,
-            "reason": "Verified positive review.",
-            "capped_positive": True,
-        }
-
-    if category == "SCAM":
+        else:
+            impact = {
+                "points": 5,
+                "counted": True,
+                "in_rating": True,
+                "category": category,
+                "recent": recent,
+                "reason": "Verified positive review.",
+                "capped_positive": True,
+            }
+    elif category == "SCAM":
         if report.resolved:
-            return {
+            impact = {
                 "points": 0,
                 "counted": False,
                 "category": category,
                 "recent": recent,
                 "reason": "Scam report is marked resolved, so it no longer penalises the shop.",
             }
-        points = -40 if recent else -20
-        reason = "Unresolved scam report."
-        if recent:
-            reason = "Unresolved scam report from the last 30 days. Penalty counted twice."
-        return {
-            "points": points,
-            "counted": True,
-            "category": category,
-            "recent": recent,
-            "reason": reason,
-        }
-
-    if category in SERVICE_CATEGORIES:
+        else:
+            points = -40 if recent else -20
+            reason = "Unresolved scam report."
+            if recent:
+                reason = "Unresolved scam report from the last 30 days. Penalty counted twice."
+            impact = {
+                "points": points,
+                "counted": True,
+                "category": category,
+                "recent": recent,
+                "reason": reason,
+            }
+    elif category in SERVICE_CATEGORIES:
         points = -10 if recent else -5
         reason = "Delivery or service complaint."
         if recent:
             reason = "Recent delivery or service complaint. Penalty counted twice."
-        return {
+        impact = {
             "points": points,
             "counted": True,
             "category": category,
             "recent": recent,
             "reason": reason,
         }
+    else:
+        impact = {
+            "points": 0,
+            "counted": False,
+            "category": category,
+            "recent": recent,
+            "reason": "This category does not move the score.",
+        }
 
-    return {
-        "points": 0,
-        "counted": False,
-        "category": category,
-        "recent": recent,
-        "reason": "This category does not move the score.",
-    }
+    impact["reporter_weight"] = weight
+    impact["weight_reason"] = weight_reason
+    if weight == 0:
+        impact["points"] = 0
+        impact["counted"] = False
+        impact.pop("capped_positive", None)
+        impact["reason"] = weight_reason
+    elif impact.get("capped_positive"):
+        impact["points"] = 5 * weight
+    else:
+        impact["points"] = round(impact["points"] * weight, 2)
+    return impact
 
 
 def score_vendor(vendor, reports, now: datetime | None = None) -> dict:
@@ -175,8 +193,29 @@ def score_vendor(vendor, reports, now: datetime | None = None) -> dict:
     impacts: dict[int, dict] = {}
     positive_ids: list[int] = []
 
-    for report in reports:
-        impact = _impact(report, now)
+    vendor_phone = getattr(vendor, "phone", None)
+    vendor_fingerprint = None
+    if vendor_phone:
+        from reporter_privacy import reporter_fingerprint
+
+        vendor_fingerprint = reporter_fingerprint(vendor_phone)
+    recent_reporters: dict[str, list[datetime]] = {}
+    chronological_reports = sorted(reports, key=lambda report: (report.created_at, report.id or 0))
+    for report in chronological_reports:
+        fingerprint = getattr(report, "reporter_hash", None)
+        weight = 1.0
+        weight_reason = None
+        if fingerprint and fingerprint == vendor_fingerprint:
+            weight = 0.0
+            weight_reason = "No score impact: the reporter number matches the shop's registered phone."
+        elif fingerprint:
+            recent = recent_reporters.setdefault(fingerprint, [])
+            recent[:] = [when for when in recent if report.created_at - when < REPEAT_WINDOW]
+            if recent:
+                weight = REPEAT_REPORT_WEIGHT
+                weight_reason = "Reduced to 25%: this phone has reported on this shop within seven days."
+            recent.append(report.created_at)
+        impact = _impact(report, now, weight, weight_reason)
         impacts[report.id] = impact
         if impact.get("capped_positive"):
             positive_ids.append(report.id)
@@ -184,7 +223,7 @@ def score_vendor(vendor, reports, now: datetime | None = None) -> dict:
     positive_ids.sort(key=lambda report_id: next(r.created_at for r in reports if r.id == report_id))
     budget = 20
     for report_id in positive_ids:
-        grant = min(5, budget)
+        grant = min(impacts[report_id]["points"], budget)
         budget -= grant
         impacts[report_id]["points"] = grant
         impacts[report_id]["in_rating"] = True
@@ -203,8 +242,8 @@ def score_vendor(vendor, reports, now: datetime | None = None) -> dict:
         elif impact["category"] in SERVICE_CATEGORIES:
             service_points += impact["points"]
 
-    raw = 50 + legal_points + positive_points + scam_points + service_points
-    score = max(0, min(100, raw))
+    raw = round(50 + legal_points + positive_points + scam_points + service_points, 2)
+    score = max(0, min(100, round(raw)))
     band, label, advice = band_for(score)
 
     positive_count = sum(1 for item in impacts.values() if item["category"] == "POSITIVE" and item.get("in_rating"))
@@ -229,18 +268,18 @@ def score_vendor(vendor, reports, now: datetime | None = None) -> dict:
     else:
         notes.append("No active KRA PIN or BRS registration is linked to this shop.")
     if positive_count:
-        notes.append(f"{positive_count} verified buyer review{'s' if positive_count != 1 else ''} (+{positive_points}, cap 20).")
+        notes.append(f"{positive_count} verified buyer review{'s' if positive_count != 1 else ''} (+{positive_points:g}, cap 20).")
     if scam_count:
-        notes.append(f"{scam_count} unresolved scam report{'s' if scam_count != 1 else ''} ({scam_points}).")
+        notes.append(f"{scam_count} unresolved scam report{'s' if scam_count != 1 else ''} ({scam_points:g}).")
     if service_count:
-        notes.append(f"{service_count} delivery or service complaint{'s' if service_count != 1 else ''} ({service_points}).")
+        notes.append(f"{service_count} delivery or service complaint{'s' if service_count != 1 else ''} ({service_points:g}).")
     if false_count:
         notes.append(f"{false_count} report{'s' if false_count != 1 else ''} set aside as spam or unverifiable.")
     if raw != score:
         notes.append("The raw total sits outside 0 to 100 and is clamped for the gauge.")
 
     return {
-        "formula": "signal-v1",
+        "formula": "signal-v2",
         "score": score,
         "raw": raw,
         "band": band,

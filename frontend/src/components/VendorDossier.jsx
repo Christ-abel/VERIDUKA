@@ -384,6 +384,11 @@ function ReportList({ reports, shopName, onChanged }) {
               .join(", ")}
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ink/85">{report.description}</p>
+          {report.impact?.reporter_weight < 1 && (
+            <p className="mt-2 text-xs font-semibold text-caution">
+              Reporter weight: {Math.round(report.impact.reporter_weight * 100)}%
+            </p>
+          )}
           <p className="mt-2 text-xs text-ink/55">{report.impact?.reason}</p>
           {report.proof_url && (
             <a href={report.proof_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-signal">

@@ -40,6 +40,7 @@ The formula is named `signal-v1`. It starts at **50** and stays between **0 and 
 | Delayed delivery, non-delivery, or poor service | −5 |
 | Negative report newer than 30 days | that penalty counts double |
 | Spam, or a social comment with no public link | saved, and the score does not move |
+| M-Pesa confirmation code already used | saved, and the score does not move |
 
 Praise does not get a recency bonus. Only penalties double, so a fresh complaint is louder than an old one. Extra praise after the +20 cap still shows in the service rating, with 0 points and a note that the cap is reached.
 
@@ -50,6 +51,8 @@ Praise does not get a recency bonus. Only penalties double, so a fresh complaint
 | 0 to 49 | High noise / fraud alert | High risk of a ghost vendor. Do not pay upfront |
 
 A positive review counts toward the score when it has a proof link and the classifier is confident it is praise. A pending KRA PIN or a pending business name is shown on the legal tab, and it does not earn the +25.
+
+A pasted M-Pesa confirmation code, such as `QK72H8L9P0` at the start of a Safaricom SMS, is hashed and stored with the report. The first report to carry that code can still move the score. The same code filed again, including on a different shop, stays on file with a written reason and adds nothing. The raw code is not given its own field.
 
 On a fresh database the three seeded shops land at:
 
@@ -140,6 +143,7 @@ VERIDUKA/
 │   ├── models.py
 │   ├── schemas.py
 │   ├── scoring.py            # signal-v1
+│   ├── receipts.py           # one M-Pesa confirmation code, one shop
 │   ├── classifier.py
 │   ├── reading.py            # plain review text, not a score input
 │   ├── social.py             # optional import, unused by the dashboard
@@ -237,7 +241,7 @@ Issues are the best place to start. Each one is a slice that makes the check har
 1. [Match an M-Pesa till name to the registered business](https://github.com/Christ-abel/VERIDUKA/issues/1)
 2. [Classify reports and SMS written in Swahili](https://github.com/Christ-abel/VERIDUKA/issues/2)
 3. [Weight reports by reporter reputation](https://github.com/Christ-abel/VERIDUKA/issues/3)
-4. [Reject a reused M-Pesa receipt](https://github.com/Christ-abel/VERIDUKA/issues/4)
+4. [Reject a reused M-Pesa receipt](https://github.com/Christ-abel/VERIDUKA/issues/4) (done)
 5. [Let a merchant post a public reply](https://github.com/Christ-abel/VERIDUKA/issues/5)
 6. [Receive WhatsApp messages a shop opts in to share](https://github.com/Christ-abel/VERIDUKA/issues/6)
 

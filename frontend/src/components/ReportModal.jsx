@@ -94,7 +94,7 @@ export default function ReportModal({ seed, onClose, onSubmitted }) {
           </button>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-ink/70">
-          Positive reports move the score when the text reads as a real review and a proof link is attached. The praise cap is +20. Spam is stored and ignored.
+          Positive reports move the score when the text reads as a real review and a proof link is attached. The praise cap is +20. Spam is stored and ignored. Paste the M-Pesa message if you have it. A confirmation code already used for another shop is kept on file and does not move the score.
         </p>
         <form className="mt-5 space-y-4" onSubmit={submit}>
           <Field label="Shop identifier" htmlFor="identifier">
@@ -127,7 +127,7 @@ export default function ReportModal({ seed, onClose, onSubmitted }) {
               required
               minLength={10}
               rows={5}
-              placeholder="I paid the paybill on Friday. The rider never arrived and they blocked me on WhatsApp."
+              placeholder="I paid on Friday. Confirmation code QK72H8L9P0. The rider never arrived and they blocked me on WhatsApp."
               className="field resize-y"
             />
           </Field>

@@ -64,6 +64,7 @@ from schemas import (
     WhatsAppWebhookOut,
 )
 from reading import reading_lines
+from receipts import attach_receipt
 from scoring import legally_verified, score_vendor
 from social import comment_to_report, fetch_authorized_instagram, first_link, parse_whatsapp_messages, valid_whatsapp_signature
 from thrivewave import (
@@ -515,6 +516,7 @@ def create_report(payload: ReportIn, db: Session = Depends(get_db)):
         score_eligible=True,
         created_at=utcnow(),
     )
+    attach_receipt(db, report, {})
     db.add(report)
     db.flush()
     score = score_vendor(vendor, load_reports(db, vendor.id))
@@ -687,6 +689,7 @@ def import_social(payload: SocialImportIn, db: Session = Depends(get_db)):
     vendor, _created = _open_vendor(db, payload.vendor_id, payload.identifier)
     imported = 0
     counted = 0
+    seen_receipts: dict[str, int] = {}
     for item in payload.comments:
         report = comment_to_report(
             vendor_id=vendor.id,
@@ -695,6 +698,7 @@ def import_social(payload: SocialImportIn, db: Session = Depends(get_db)):
             author_handle=item.author_handle,
             permalink=item.permalink or payload.permalink,
         )
+        attach_receipt(db, report, seen_receipts)
         db.add(report)
         imported += 1
         if report.score_eligible:
@@ -733,20 +737,21 @@ def sync_social(db: Session = Depends(get_db)):
         )
 
     imported = 0
+    seen_receipts: dict[str, int] = {}
     for comment in comments:
         external_id = comment.get("external_id") or None
         if external_id and db.query(Report).filter(Report.external_id == external_id).first():
             continue
-        db.add(
-            comment_to_report(
-                vendor_id=vendor.id,
-                platform="instagram",
-                text=comment["text"],
-                author_handle=comment.get("author_handle"),
-                permalink=comment.get("permalink"),
-                external_id=external_id,
-            )
+        report = comment_to_report(
+            vendor_id=vendor.id,
+            platform="instagram",
+            text=comment["text"],
+            author_handle=comment.get("author_handle"),
+            permalink=comment.get("permalink"),
+            external_id=external_id,
         )
+        attach_receipt(db, report, seen_receipts)
+        db.add(report)
         imported += 1
     db.commit()
     return SocialSyncOut(
@@ -812,6 +817,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     messages = parse_whatsapp_messages(data)
     imported = 0
     seen: set[str] = set()
+    seen_receipts: dict[str, int] = {}
     for item in messages:
         vendor = db.query(Vendor).filter(Vendor.whatsapp_phone_number_id == item["phone_number_id"]).first()
         if vendor is None:
@@ -821,16 +827,16 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             continue
         if external_id:
             seen.add(external_id)
-        db.add(
-            comment_to_report(
-                vendor_id=vendor.id,
-                platform="whatsapp",
-                text=item["text"],
-                author_handle=mask_phone(item["sender"]),
-                permalink=first_link(item["text"]),
-                external_id=external_id,
-            )
+        report = comment_to_report(
+            vendor_id=vendor.id,
+            platform="whatsapp",
+            text=item["text"],
+            author_handle=mask_phone(item["sender"]),
+            permalink=first_link(item["text"]),
+            external_id=external_id,
         )
+        attach_receipt(db, report, seen_receipts)
+        db.add(report)
         imported += 1
     db.commit()
     return WhatsAppWebhookOut(received=len(messages), imported=imported, ignored=len(messages) - imported)

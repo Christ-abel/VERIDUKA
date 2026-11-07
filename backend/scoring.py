@@ -44,12 +44,15 @@ def _held(report, category: str, recent: bool) -> dict | None:
     if report.is_false_report:
         return None
     if getattr(report, "score_eligible", True) is False:
+        reason = getattr(report, "ineligible_reason", None) or (
+            "Saved. Add the public post link before this comment moves the score."
+        )
         return {
             "points": 0,
             "counted": False,
             "category": category,
             "recent": recent,
-            "reason": "Saved. Add the public post link before this comment moves the score.",
+            "reason": reason,
         }
     return None
 

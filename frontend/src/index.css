@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #14241c;
+  background: #efe7d8;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(28, 122, 69, 0.08), transparent 28rem),
+    #efe7d8;
+}
+
+::selection {
+  background: #cfe6d8;
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.85rem;
+  border: 1px solid #ddd4c4;
+  background: #fff;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  color: #14241c;
+  outline: none;
+}
+
+.field:focus {
+  box-shadow: 0 0 0 3px rgba(28, 122, 69, 0.22);
+}
+
+.eq-bar,
+.noise-bar {
+  transform-origin: bottom;
+}
+
+.eq-bar {
+  animation: eq 1.35s ease-in-out infinite;
+}
+
+.noise-bar {
+  animation: noise 0.48s steps(2, end) infinite;
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes noise {
+  0% {
+    transform: scaleY(0.25);
+  }
+  40% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eq-bar,
+  .noise-bar {
+    animation: none;
+  }
+}

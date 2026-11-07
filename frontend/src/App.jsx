@@ -160,8 +160,7 @@ export default function App() {
 
       <main className="mx-auto grid min-w-0 max-w-6xl items-start gap-8 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:px-6">
         <section className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-signal">Noise vs signal</p>
-          <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.08] text-ink sm:text-5xl">
+          <h1 className="max-w-3xl font-display text-4xl leading-[1.08] text-ink sm:text-5xl">
             VeriDuka. Filter out online shopping noise with verified trust signals
           </h1>
           <p className="mt-4 max-w-2xl text-lg leading-relaxed text-ink/75">

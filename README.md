@@ -117,7 +117,7 @@ ThriveWave carries the same check to a handset. The dashboard includes a phone s
 | `REGISTER Kayole Greens, 0711222333, 556677` | Puts that shop on file at 50 |
 | `VERIFY 522522` | No trusted record. Do not pay upfront |
 
-`THRIVEWAVE_LIVE=false` returns a mock dispatch receipt. Set the API key and `THRIVEWAVE_LIVE=true` when a real ThriveWave route is available.
+Replies go through ThriveVas, as described at https://docs.thrivevas.com/. A live send is `POST https://sms.thrivevas.com/v1/message/send` with the API key in the `x-api-key` header. `THRIVEWAVE_LIVE=false` skips that call and keeps the reply on the page.
 
 ## What is live and what is mocked
 
@@ -130,7 +130,7 @@ ThriveWave carries the same check to a handset. The dashboard includes a phone s
 | Instagram sync | Optional code path only. The dashboard does not call it without a token |
 | BRS and KRA | Local mock of three official records. `KRA_*` and `BRS_*` are reserved for a real client |
 | M-Pesa till name | Seeded badge when Daraja keys are empty. With keys, Query Organization Info must match the KRA/BRS name or the badge turns off. The score does not move |
-| ThriveWave | Mock dispatch until `THRIVEWAVE_LIVE=true` |
+| ThriveVas SMS | Live when `THRIVEWAVE_LIVE=true` and `THRIVEVAS_API_KEY` is set. Otherwise the page shows the reply only |
 
 The mock registry includes a decoy company, Savanna Hardware Limited in Mombasa, so a PIN from one business is not stamped onto an unrelated shop.
 
@@ -241,8 +241,11 @@ The short-code check is the section above, "How an M-Pesa short code is checked"
 | --- | --- |
 | `PORT` | API port. Default `8000` |
 | `DATABASE_URL` | Leave unset locally so the API uses `backend/veriduka.db` |
-| `THRIVEWAVE_API_URL`, `THRIVEWAVE_API_KEY`, `THRIVEWAVE_SENDER_ID`, `THRIVEWAVE_CALLBACK_URL` | SMS route |
-| `THRIVEWAVE_LIVE` | `true` sends real dispatches. `false` returns a mock receipt |
+| `THRIVEVAS_API_KEY` | ThriveVas API key, sent as `x-api-key`. Falls back to `THRIVEWAVE_API_KEY` |
+| `THRIVEVAS_SENDER_ID` | Registered sender ID. Default `ThriveVas` |
+| `THRIVEVAS_SMS_URL` | Send URL. Default `https://sms.thrivevas.com/v1/message/send` |
+| `THRIVEWAVE_CALLBACK_URL` | Optional delivery-report URL |
+| `THRIVEWAVE_LIVE` | `true` sends through ThriveVas. `false` keeps the reply on the page |
 | `META_GRAPH_VERSION` | Graph API version, default `v21.0` |
 | `META_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized this app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Reserved for live registry clients |

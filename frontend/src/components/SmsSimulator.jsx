@@ -13,6 +13,7 @@ let messageId = 1;
 
 export default function SmsSimulator({ job }) {
   const [draft, setDraft] = useState("VERIFY 400200");
+  const [handset, setHandset] = useState("");
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -43,14 +44,14 @@ export default function SmsSimulator({ job }) {
     setDraft("");
     setBusy(true);
     try {
-      const data = await api.sms({ text: outbound, from: "0711000111" });
+      const data = await api.sms({ text: outbound, from: handset.trim() || "0711000111" });
       setMessages((current) => [
         ...current,
         {
           id: messageId++,
           role: "in",
           text: data.reply,
-          meta: `${data.dispatch.status} ${data.dispatch.provider_ref}`,
+          meta: [data.dispatch.status, data.dispatch.provider_ref].filter(Boolean).join(" "),
         },
       ]);
     } catch (error) {
@@ -76,7 +77,7 @@ export default function SmsSimulator({ job }) {
               <p className="text-[10px] uppercase tracking-[0.16em] text-[#b7c9bc]">Sender ID</p>
               <p className="font-semibold">VERIDUKA</p>
             </div>
-            <p className="text-xs text-[#b7c9bc]">0711 000 111</p>
+            <p className="text-xs text-[#b7c9bc]">{handset.trim() || "0711 000 111"}</p>
           </div>
           <div ref={threadRef} className="flex h-[26rem] flex-col gap-3 overflow-y-auto px-3 py-4">
             {messages.map((message) => (
@@ -93,6 +94,22 @@ export default function SmsSimulator({ job }) {
             ))}
             {busy && <p className="text-xs text-ink/50">Scoring the till…</p>}
           </div>
+          <form
+            className="border-t border-line bg-white px-3 pt-3"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <label className="sr-only" htmlFor="sms-handset">
+              Handset that receives the reply
+            </label>
+            <input
+              id="sms-handset"
+              value={handset}
+              onChange={(event) => setHandset(event.target.value)}
+              inputMode="tel"
+              placeholder="Your phone, 07..."
+              className="w-full rounded-full border border-line px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-signal/30"
+            />
+          </form>
           <form
             className="flex gap-2 border-t border-line bg-white p-3"
             onSubmit={(event) => {
@@ -133,7 +150,7 @@ export default function SmsSimulator({ job }) {
         ))}
       </div>
       <p className="mt-3 text-xs leading-relaxed text-ink/60">
-        The phone calls the same webhook a ThriveWave inbound message would hit. Dispatch stays mocked unless THRIVEWAVE_LIVE is on.
+        Type your Safaricom number, then Send. The reply is queued through ThriveVas to that handset. The sender ID is ThriveVas unless you set another registered one.
       </p>
     </aside>
   );

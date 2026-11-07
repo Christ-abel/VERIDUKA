@@ -1,0 +1,24 @@
+services:
+  veriduka:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      DATABASE_URL: sqlite:////data/veriduka.db
+      THRIVEWAVE_API_URL: https://api.thrivewave.mock/v1
+      THRIVEWAVE_API_KEY: tw_test_mock
+      THRIVEWAVE_SENDER_ID: VERIDUKA
+      THRIVEWAVE_LIVE: "false"
+    volumes:
+      - veriduka-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  veriduka-data:

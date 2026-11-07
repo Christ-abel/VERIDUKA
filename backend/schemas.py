@@ -103,6 +103,8 @@ class VendorDetail(VendorCard):
     score_detail: ScoreOut
     official: OfficialOut | None
     reports: list[ReportOut]
+    mpesa_account_name: str | None = None
+    mpesa_verification_message: str | None = None
 
 
 class SearchOut(BaseModel):

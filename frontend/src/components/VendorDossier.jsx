@@ -192,6 +192,18 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
           </p>
         </div>
       )}
+      {vendor.mpesa_verification_message && (
+        <div
+          className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+            vendor.badges.mpesa_verified
+              ? "border-signal/30 bg-signal/10"
+              : "border-caution/30 bg-caution/10"
+          }`}
+        >
+          <p className="font-semibold text-ink">M-Pesa sandbox name check</p>
+          <p className="mt-1 text-ink/75">{vendor.mpesa_verification_message}</p>
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -199,7 +211,7 @@ function LegalPanel({ vendor, checking, message, onRecheck }) {
           disabled={checking}
           className="rounded-full border border-ink px-4 py-2 text-sm font-semibold disabled:opacity-60"
         >
-          {checking ? "Checking registry…" : "Check mock registry"}
+          {checking ? "Refreshing checks…" : "Refresh registry and M-Pesa checks"}
         </button>
         {message && <p className="text-sm text-ink/80">{message}</p>}
       </div>

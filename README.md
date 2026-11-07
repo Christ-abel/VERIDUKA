@@ -41,7 +41,9 @@ Copy `.env.example` to `.env`. Empty values keep the built-in mocks.
 | `THRIVEWAVE_API_KEY` and `THRIVEWAVE_LIVE=true` | Real SMS dispatch |
 | `META_ACCESS_TOKEN` and `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Comments on an Instagram account that authorized the app |
 | `KRA_API_URL`, `KRA_API_KEY`, `BRS_API_URL`, `BRS_API_KEY` | Live registry adapters, when those clients are added |
-| `DARAJA_CONSUMER_KEY` and `DARAJA_CONSUMER_SECRET` | Reserved for a Safaricom till-name check |
+| `DARAJA_CONSUMER_KEY`, `DARAJA_CONSUMER_SECRET`, and `DARAJA_ENVIRONMENT=sandbox` | Enable the local M-Pesa name-check simulation |
+
+The public Daraja sandbox APIs do not expose a till/paybill-to-name lookup. When both Daraja credential fields are filled and the environment is `sandbox`, VeriDuka uses local fixtures to simulate the returned account name and compares it with the linked KRA/BRS registered name. The fixtures are `400200` → Nairobi Tech Hub Electronics Limited, `987654` → Trendy Clothez Kenya, and `600600` → Savanna Hardware Limited. The legal tab explains a match or mismatch. This is a demo only; it does not contact Safaricom. With both credential fields empty, the existing M-Pesa badge behavior is unchanged.
 
 ## Social comments
 

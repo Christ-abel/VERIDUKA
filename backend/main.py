@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -66,6 +68,12 @@ STOP_WORDS = {
     "organic",
 }
 
+MPESA_SANDBOX_ACCOUNT_NAMES = {
+    "400200": "Nairobi Tech Hub Electronics Limited",
+    "987654": "Trendy Clothez Kenya",
+    "600600": "Savanna Hardware Limited",
+}
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -120,11 +128,11 @@ def legal_state(vendor: Vendor) -> str:
     return "unverified"
 
 
-def badges_for(vendor: Vendor) -> dict:
+def badges_for(vendor: Vendor, mpesa_verified: bool | None = None) -> dict:
     return {
         "brs_registered": vendor.brs_status == "verified",
         "kra_active": vendor.kra_status == "verified",
-        "mpesa_verified": bool(vendor.mpesa_verified),
+        "mpesa_verified": bool(vendor.mpesa_verified) if mpesa_verified is None else mpesa_verified,
     }
 
 
@@ -159,7 +167,12 @@ def score_out(score: dict) -> ScoreOut:
     )
 
 
-def vendor_card(vendor: Vendor, score: dict, match_field: str) -> VendorCard:
+def vendor_card(
+    vendor: Vendor,
+    score: dict,
+    match_field: str,
+    mpesa_verified: bool | None = None,
+) -> VendorCard:
     return VendorCard(
         id=vendor.id,
         name=vendor.name,
@@ -173,7 +186,7 @@ def vendor_card(vendor: Vendor, score: dict, match_field: str) -> VendorCard:
         brs_number=vendor.brs_number,
         kra_status=vendor.kra_status,
         brs_status=vendor.brs_status,
-        mpesa_verified=bool(vendor.mpesa_verified),
+        mpesa_verified=bool(vendor.mpesa_verified) if mpesa_verified is None else mpesa_verified,
         is_shadow=bool(vendor.is_shadow),
         match_field=match_field,
         score=score["score"],
@@ -239,14 +252,61 @@ def report_out(report: Report, impact: dict) -> ReportOut:
 def vendor_detail(db: Session, vendor: Vendor, match_field: str = "profile") -> VendorDetail:
     reports = load_reports(db, vendor.id)
     score = score_vendor(vendor, reports)
-    card = vendor_card(vendor, score, match_field)
+    record = official_for(db, vendor)
+    mpesa_verified, mpesa_account_name, mpesa_message = mpesa_assessment(
+        vendor,
+        record.registered_name if record else None,
+    )
+    card = vendor_card(vendor, score, match_field, mpesa_verified)
     return VendorDetail(
         **card.model_dump(),
-        badges=badges_for(vendor),
+        badges=badges_for(vendor, mpesa_verified),
         legal_state=legal_state(vendor),
         score_detail=score_out(score),
-        official=official_out(official_for(db, vendor)),
+        official=official_out(record),
+        mpesa_account_name=mpesa_account_name,
+        mpesa_verification_message=mpesa_message,
         reports=[report_out(report, score["impacts"].get(report.id, {})) for report in reports],
+    )
+
+
+def mpesa_assessment(
+    vendor: Vendor,
+    registered_name: str | None,
+    settings: Mapping[str, str] | None = None,
+) -> tuple[bool, str | None, str | None]:
+    config = os.environ if settings is None else settings
+    consumer_key = config.get("DARAJA_CONSUMER_KEY", "").strip()
+    consumer_secret = config.get("DARAJA_CONSUMER_SECRET", "").strip()
+
+    if not consumer_key and not consumer_secret:
+        return bool(vendor.mpesa_verified), None, None
+    if not consumer_key or not consumer_secret:
+        return False, None, "Sandbox simulation unavailable: configure both Daraja consumer credentials."
+    if config.get("DARAJA_ENVIRONMENT", "sandbox").strip().lower() != "sandbox":
+        return False, None, "M-Pesa name verification is only available in the local sandbox simulation."
+    if not vendor.paybill:
+        return False, None, "No till or paybill is on file, so its M-Pesa name cannot be checked."
+
+    account_name = MPESA_SANDBOX_ACCOUNT_NAMES.get(vendor.paybill)
+    if not account_name:
+        return False, None, f"No local sandbox fixture exists for paybill {vendor.paybill}; M-Pesa is not verified."
+    if not registered_name:
+        return (
+            False,
+            account_name,
+            f'Sandbox returned "{account_name}", but no linked KRA/BRS registered name is available to compare.',
+        )
+    if not names_match(account_name, registered_name):
+        return (
+            False,
+            account_name,
+            f'M-Pesa name mismatch: sandbox returned "{account_name}", but the linked registered name is "{registered_name}".',
+        )
+    return (
+        True,
+        account_name,
+        f'Sandbox M-Pesa name "{account_name}" matches the linked registered name "{registered_name}".',
     )
 
 

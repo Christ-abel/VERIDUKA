@@ -102,6 +102,13 @@ class OfficialOut(BaseModel):
     registered_on: str
 
 
+class ProfileLink(BaseModel):
+    """A public page the buyer opens. The URL is not fed into the trust score."""
+
+    handle: str
+    url: str
+
+
 class VendorCard(BaseModel):
     id: int
     name: str
@@ -111,6 +118,9 @@ class VendorCard(BaseModel):
     phone: str | None
     paybill: str | None
     instagram: str | None
+    facebook: str | None = None
+    tiktok: str | None = None
+    profiles: dict[str, ProfileLink] = Field(default_factory=dict)
     kra_pin: str | None
     brs_number: str | None
     kra_status: str
@@ -252,6 +262,58 @@ class LegalOut(BaseModel):
     registered_on: str | None
     message: str
     vendor_updated: bool
+
+
+class VendorRegisterIn(BaseModel):
+    """A shop putting itself on file. This does not grant a legal bonus."""
+
+    name: str = Field(min_length=3, max_length=160)
+    phone: str
+    paybill: str | None = None
+    instagram: str | None = Field(default=None, max_length=80)
+    facebook: str | None = Field(default=None, max_length=80)
+    tiktok: str | None = Field(default=None, max_length=80)
+    category: str = Field(default="General", max_length=80)
+    location: str = Field(default="Kenya", max_length=120)
+    about: str = Field(default="", max_length=1000)
+
+    @field_validator("name", "category", "location", "about")
+    @classmethod
+    def tidy(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("phone")
+    @classmethod
+    def clean_phone(cls, value: str) -> str:
+        if not PHONE_RE.match(re.sub(r"\s+", "", value.strip())):
+            raise ValueError("Use a Kenyan mobile number, for example 0712345678.")
+        return canonical_phone(value)
+
+    @field_validator("paybill")
+    @classmethod
+    def clean_paybill(cls, value: str | None) -> str | None:
+        if value is None or not str(value).strip():
+            return None
+        digits = re.sub(r"\D", "", value)
+        if not re.fullmatch(r"\d{5,7}", digits):
+            raise ValueError("Paybill must be 5 to 7 digits.")
+        return digits
+
+    @field_validator("instagram", "facebook", "tiktok")
+    @classmethod
+    def clean_handle(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return value.strip().lstrip("@")[:80]
+
+
+class ReadingOut(BaseModel):
+    """Comments in reading order. The list is not classified and does not move the score."""
+
+    vendor_id: int
+    vendor_name: str
+    count: int
+    lines: list[str]
 
 
 class SmsOut(BaseModel):

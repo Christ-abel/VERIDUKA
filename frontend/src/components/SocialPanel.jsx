@@ -1,149 +1,119 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
-import { formatWhen, signed } from "../format";
 
-const PLATFORMS = [
-  ["instagram", "Instagram"],
-  ["facebook", "Facebook"],
-  ["tiktok", "TikTok"],
-  ["x", "X"],
-  ["whatsapp", "WhatsApp"],
+/**
+ * Public pages and a plain comment reader.
+ *
+ * Links open Instagram, Facebook, or TikTok for someone with a browser.
+ * The reader below, and the SMS COMMENTS command, walk the same saved
+ * reviews one at a time. Neither path classifies the text or moves the score.
+ */
+const PAGES = [
+  ["instagram", "Instagram", "Photo and comment threads on the shop's profile."],
+  ["facebook", "Facebook", "Page posts and the comments under them."],
+  ["tiktok", "TikTok", "Short videos and the reviews left on them."],
 ];
 
-export default function SocialPanel({ vendor, onChanged }) {
-  const [platform, setPlatform] = useState("instagram");
-  const [comments, setComments] = useState("");
-  const [permalink, setPermalink] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
-  const social = (vendor.reports || []).filter((item) => item.source === "social");
-
-  async function submit(event) {
-    event.preventDefault();
-    const lines = comments
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length >= 8);
-    if (!lines.length) {
-      setError("Add at least one comment of 8 characters or more. Put each comment on its own line.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await api.importSocial({
-        vendor_id: vendor.id,
-        platform,
-        permalink: permalink.trim() || null,
-        comments: lines.map((text) => ({ text })),
-      });
-      setComments("");
-      setNotice(
-        `Saved ${result.imported}. ${result.counted} can move the score. ${result.held} are held until they have a clear reading and a post link. Score is now ${result.score}%.`,
-      );
-      await onChanged();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function sync() {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await api.syncSocial();
-      setNotice(result.message);
-      if (result.imported) await onChanged();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
+export default function SocialPanel({ vendor }) {
+  const profiles = vendor.profiles || {};
+  const available = PAGES.filter(([key]) => profiles[key]);
 
   return (
     <div>
-      <p className="text-sm leading-relaxed text-ink/75">
-        Comments come from people, or from a shop that has connected its own Instagram professional account.
-        Paste one public comment per line. Include the post link if the comment should move the trust score.
-        VeriDuka does not log into Instagram or read an account that has not authorized the app.
+      <CommentReader vendorId={vendor.id} />
+      <p className="mt-6 text-sm leading-relaxed text-ink/75">
+        Someone with a smartphone can also open the shop's own page. VeriDuka only links out. It does not sign in,
+        and it does not copy those comments into the score.
       </p>
-      <form className="mt-4 space-y-3" onSubmit={submit}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm font-medium" htmlFor="social-platform">
-            Platform
-            <select
-              id="social-platform"
-              className="field mt-1"
-              value={platform}
-              onChange={(event) => setPlatform(event.target.value)}
-            >
-              {PLATFORMS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium" htmlFor="social-link">
-            Post link
-            <input
-              id="social-link"
-              className="field mt-1"
-              value={permalink}
-              onChange={(event) => setPermalink(event.target.value)}
-              placeholder="https://www.instagram.com/p/example"
-            />
-          </label>
-        </div>
-        <label className="block text-sm font-medium" htmlFor="social-comments">
-          Comments
-          <textarea
-            id="social-comments"
-            className="field mt-1"
-            rows={5}
-            value={comments}
-            onChange={(event) => setComments(event.target.value)}
-            placeholder={"Paid the paybill and they blocked me. Nothing was delivered.\nFast delivery and the item was genuine. I recommend this shop."}
-          />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={busy} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper disabled:opacity-60">
-            {busy ? "Saving…" : "Add comments"}
-          </button>
-          <button type="button" onClick={sync} disabled={busy} className="rounded-full border border-ink px-4 py-2 text-sm font-semibold disabled:opacity-60">
-            Sync connected Instagram
-          </button>
-        </div>
-      </form>
-      {notice && <p className="mt-3 text-sm text-ink/80">{notice}</p>}
-      {error && (
-        <p role="alert" className="mt-3 rounded-xl bg-[#f8e4df] px-3 py-2 text-sm text-noise">
-          {error}
-        </p>
+      {available.length === 0 ? (
+        <p className="mt-4 text-sm text-ink/60">No public page is on file for this shop yet.</p>
+      ) : (
+        <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+          {available.map(([key, label, detail]) => (
+            <li key={key} className="rounded-2xl border border-line bg-paper px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/45">{label}</p>
+              <p className="mt-2 font-medium text-ink">@{profiles[key].handle}</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink/65">{detail}</p>
+              <a
+                href={profiles[key].url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block text-sm font-semibold text-signal"
+              >
+                Open {label}
+              </a>
+            </li>
+          ))}
+        </ul>
       )}
-      <ul className="mt-5 space-y-3">
-        {social.length === 0 && <li className="text-sm text-ink/60">No social comments on this shop yet.</li>}
-        {social.map((report) => (
-          <li key={report.id} className="rounded-2xl border border-line px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold">{report.ai_label}</p>
-              <p className="font-mono text-sm">{signed(report.impact?.points || 0)}</p>
-            </div>
-            <p className="mt-1 text-xs uppercase tracking-wide text-ink/45">
-              {formatWhen(report.created_at)}, {report.platform}
-              {report.author_handle ? ` @${report.author_handle}` : ""}
+      <p className="mt-4 text-sm text-ink/60">
+        Saw a scam or a delivery that never came? Use Add a report. That is the path that can move the score.
+      </p>
+    </div>
+  );
+}
+
+function CommentReader({ vendorId }) {
+  const [lines, setLines] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setIndex(0);
+    api
+      .reading(vendorId)
+      .then((data) => {
+        if (!cancelled) {
+          setLines(data.lines || []);
+          setError("");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vendorId]);
+
+  const total = lines.length;
+  const line = total ? lines[Math.min(index, total - 1)] : "";
+
+  return (
+    <div className="rounded-2xl border border-line bg-paper px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/45">Read the reviews</p>
+      <p className="mt-2 text-sm leading-relaxed text-ink/70">
+        No smartphone? Text COMMENTS and the paybill, then NEXT. This page does the same thing. The words are shown as saved. They are not scored again here.
+      </p>
+      {error && <p className="mt-3 text-sm text-noise">{error}</p>}
+      {!error && total === 0 && <p className="mt-3 text-sm text-ink/60">No reviews on file yet.</p>}
+      {total > 0 && (
+        <>
+          <p className="mt-3 text-sm leading-relaxed text-ink">{line}</p>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIndex((current) => Math.max(0, current - 1))}
+              disabled={index === 0}
+              className="rounded-full border border-ink px-3 py-1.5 text-sm font-semibold disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={() => setIndex((current) => Math.min(total - 1, current + 1))}
+              disabled={index >= total - 1}
+              className="rounded-full bg-ink px-3 py-1.5 text-sm font-semibold text-paper disabled:opacity-40"
+            >
+              Next
+            </button>
+            <p className="text-sm text-ink/55">
+              {index + 1} of {total}
             </p>
-            <p className="mt-2 text-sm leading-relaxed">{report.description}</p>
-            <p className="mt-2 text-xs text-ink/55">{report.impact?.reason}</p>
-          </li>
-        ))}
-      </ul>
+          </div>
+        </>
+      )}
     </div>
   );
 }

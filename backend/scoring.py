@@ -1,6 +1,12 @@
-"""Trust Signal Score.
+"""Trust Signal Score, formula id signal-v1.
 
-The score starts at 50 and moves with legal proof and buyer reports:
+The score uses only the tools in the brief:
+
+- the mock BRS / KRA registry on the shop (active KRA or registered BRS)
+- buyer reports after the on-box classifier accepts them
+- the same integer is what ThriveWave SMS reads back
+
+It starts at 50 and moves like this:
 
 - Government legal verification (active KRA PIN or registered BRS): +25
 - Verified positive reviews: +5 each, capped at +20
@@ -8,8 +14,12 @@ The score starts at 50 and moves with legal proof and buyer reports:
 - Non-delivery, delayed delivery, or poor service: -5 each
 - A negative report newer than 30 days counts double
 
-The result is clamped to 0–100. Praise does not get a recency bonus; only
-penalties double. That keeps a burst of fresh complaints louder than old ones.
+The result is clamped to 0 to 100. Praise does not get a recency bonus. Only
+penalties double, so a burst of fresh complaints is louder than old ones.
+
+Instagram, Facebook, and TikTok URLs are not inputs. A buyer opens those
+pages and reads the reviews there. A comment moves this function only after
+someone files it as a report and the classifier keeps it.
 """
 
 from __future__ import annotations
@@ -60,6 +70,8 @@ def category_for_score(report) -> str:
     claimed = (report.report_type or "").upper()
     if ai == "SPAM":
         return "SPAM"
+    # 0.55 is the bar for trusting the classifier over the label the buyer picked.
+    # Below that, the buyer's own category stands, unless the text was spam.
     if (report.ai_confidence or 0) >= 0.55 and ai:
         return ai
     return claimed or ai or "POOR_SERVICE"

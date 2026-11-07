@@ -1,4 +1,11 @@
-"""VeriDuka API: search, trust profiles, buyer reports, registry checks, SMS."""
+"""VeriDuka API: search, trust profiles, buyer reports, registry checks, SMS.
+
+The score on every response comes from scoring.signal-v1: the mock BRS/KRA
+registry plus buyer reports the classifier accepted. ThriveWave SMS returns
+that same integer. Instagram, Facebook, and TikTok are profile links on the
+shop so a buyer can read those reviews themselves. This prototype does not
+call Meta or TikTok.
+"""
 
 from __future__ import annotations
 
@@ -15,20 +22,34 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from classifier import CATEGORY_LABELS, classify_report
-from database import EXACT_FIELDS, AmbiguousIdentifier, get_db, init_db, resolve_identifier, search_vendors, utcnow
-from models import OfficialRecord, Report, ReportReply, SmsLog, Vendor
+from database import (
+    EXACT_FIELDS,
+    AmbiguousIdentifier,
+    DuplicateShop,
+    create_registered_vendor,
+    get_db,
+    handle_of,
+    init_db,
+    resolve_identifier,
+    search_vendors,
+    utcnow,
+)
+from models import OfficialRecord, Report, ReportReply, SmsCursor, SmsLog, Vendor
 from schemas import (
+    canonical_phone,
     ClassifyIn,
     ClassifyOut,
     LegalIn,
     LegalOut,
     OfficialOut,
+    ProfileLink,
     ReportCreated,
     ReplyIn,
     ReplyOut,
     ReportIn,
     ReportOut,
     ResolveIn,
+    ReadingOut,
     ScoreOut,
     SearchOut,
     SmsOut,
@@ -37,17 +58,23 @@ from schemas import (
     SocialSyncOut,
     VendorCard,
     VendorDetail,
+    VendorRegisterIn,
     WhatsAppConnectIn,
     WhatsAppConnectOut,
     WhatsAppWebhookOut,
 )
+from reading import reading_lines
 from scoring import legally_verified, score_vendor
 from social import comment_to_report, fetch_authorized_instagram, first_link, parse_whatsapp_messages, valid_whatsapp_signature
 from thrivewave import (
     HELP_TEXT,
+    REGISTER_USAGE,
     UNKNOWN_TEXT,
     ThriveWaveClient,
+    normalize_msisdn,
     parse_sms_command,
+    render_comment_sms,
+    render_register_sms,
     render_unknown_sms,
     render_verify_sms,
 )
@@ -86,9 +113,10 @@ app = FastAPI(
     version="1.0.0",
     summary="Signal-based merchant verification for Kenyan online shops.",
     description=(
-        "Search a paybill, phone, Instagram handle, KRA PIN, or shop name. "
-        "The trust score mixes a mock BRS/KRA registry with buyer reports. "
-        "ThriveWave SMS uses the same score."
+        "Search a paybill, phone, social handle, KRA PIN, or shop name. "
+        "The trust score uses the mock BRS/KRA registry and buyer reports the classifier accepted. "
+        "ThriveWave SMS returns the same number. "
+        "Instagram, Facebook, and TikTok are links the buyer opens. This prototype does not call those APIs."
     ),
     lifespan=lifespan,
 )
@@ -125,6 +153,25 @@ def legal_state(vendor: Vendor) -> str:
     if vendor.kra_status == "pending" or vendor.brs_status == "pending":
         return "pending"
     return "unverified"
+
+
+def profile_links(vendor: Vendor) -> dict[str, ProfileLink]:
+    """Build the pages a buyer can open. Handles stay on the shop. URLs are derived.
+
+    The prototype has no Meta or TikTok token, so these links are the social
+    feature. Opening one does not change the trust score.
+    """
+    links: dict[str, ProfileLink] = {}
+    instagram = handle_of(vendor.instagram)
+    if instagram:
+        links["instagram"] = ProfileLink(handle=instagram, url=f"https://www.instagram.com/{instagram}/")
+    facebook = (vendor.facebook or "").strip().strip("/")
+    if facebook:
+        links["facebook"] = ProfileLink(handle=facebook, url=f"https://www.facebook.com/{facebook}")
+    tiktok = handle_of(vendor.tiktok)
+    if tiktok:
+        links["tiktok"] = ProfileLink(handle=tiktok, url=f"https://www.tiktok.com/@{tiktok}")
+    return links
 
 
 def badges_for(vendor: Vendor) -> dict:
@@ -176,6 +223,9 @@ def vendor_card(vendor: Vendor, score: dict, match_field: str) -> VendorCard:
         phone=display_phone(vendor.phone),
         paybill=vendor.paybill,
         instagram=vendor.instagram,
+        facebook=vendor.facebook,
+        tiktok=vendor.tiktok,
+        profiles=profile_links(vendor),
         kra_pin=vendor.kra_pin,
         brs_number=vendor.brs_number,
         kra_status=vendor.kra_status,
@@ -380,6 +430,40 @@ def get_vendor(vendor_id: int, db: Session = Depends(get_db)):
     vendor = db.get(Vendor, vendor_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="No vendor with that id.")
+    return vendor_detail(db, vendor)
+
+
+@app.get("/api/v1/vendor/{vendor_id}/reading", response_model=ReadingOut)
+def read_vendor_comments(vendor_id: int, db: Session = Depends(get_db)):
+    """Reviews in the order a person would read them. No classifier, no score change."""
+    vendor = db.get(Vendor, vendor_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="No vendor with that id.")
+    lines = reading_lines(load_reports(db, vendor.id))
+    return ReadingOut(vendor_id=vendor.id, vendor_name=vendor.name, count=len(lines), lines=lines)
+
+
+@app.post("/api/v1/vendors", response_model=VendorDetail, status_code=201)
+def register_vendor(payload: VendorRegisterIn, db: Session = Depends(get_db)):
+    """A shop registers itself. The score starts at 50 until a registry check or a report."""
+    try:
+        vendor = create_registered_vendor(
+            db,
+            name=payload.name,
+            phone=payload.phone,
+            paybill=payload.paybill,
+            instagram=payload.instagram,
+            facebook=payload.facebook,
+            tiktok=payload.tiktok,
+            category=payload.category,
+            location=payload.location,
+            about=payload.about,
+        )
+    except DuplicateShop as exc:
+        label = "paybill" if exc.field == "paybill" else "phone"
+        raise HTTPException(status_code=409, detail=f"That {label} is already on file.") from exc
+    db.commit()
+    db.refresh(vendor)
     return vendor_detail(db, vendor)
 
 
@@ -752,12 +836,65 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
     return WhatsAppWebhookOut(received=len(messages), imported=imported, ignored=len(messages) - imported)
 
 
+def _sms_shop(db: Session, argument: str) -> tuple[Vendor | None, str | None]:
+    matches = [
+        (vendor, field)
+        for vendor, field in search_vendors(db, argument or "")
+        if field in EXACT_FIELDS or field == "name"
+    ]
+    exact = [(vendor, field) for vendor, field in matches if field in EXACT_FIELDS]
+    chosen = exact or matches
+    if not chosen:
+        return None, render_unknown_sms(argument or "")
+    if len(chosen) > 1 and chosen[0][1] not in EXACT_FIELDS:
+        return None, "VeriDuka: Several shops match. Text the paybill or phone."
+    return chosen[0][0], None
+
+
+def _page_comments(db: Session, msisdn: str, vendor: Vendor, restart: bool) -> str:
+    """Show one saved review. Does not classify the text and does not rescore the shop."""
+    lines = reading_lines(load_reports(db, vendor.id))
+    if not lines:
+        return "VeriDuka: No reviews on file yet. The score is unchanged."
+    cursor = db.query(SmsCursor).filter(SmsCursor.msisdn == msisdn).one_or_none()
+    if cursor is None:
+        cursor = SmsCursor(msisdn=msisdn, vendor_id=vendor.id, position=0)
+        db.add(cursor)
+    if restart or cursor.vendor_id != vendor.id:
+        cursor.position = 0
+        cursor.vendor_id = vendor.id
+    index = 0 if cursor.position >= len(lines) else cursor.position
+    cursor.position = index + 1
+    cursor.vendor_id = vendor.id
+    return render_comment_sms(index + 1, len(lines), lines[index])
+
+
+def _register_from_sms(db: Session, argument: str) -> tuple[str, int | None]:
+    parts = [part.strip() for part in (argument or "").split(",")]
+    if len(parts) < 3 or len(parts[0]) < 3:
+        return REGISTER_USAGE, None
+    try:
+        phone = canonical_phone(parts[1])
+    except ValueError:
+        return REGISTER_USAGE, None
+    paybill = re.sub(r"\D", "", parts[2])
+    if not re.fullmatch(r"\d{5,7}", paybill):
+        return REGISTER_USAGE, None
+    try:
+        vendor = create_registered_vendor(db, name=parts[0], phone=phone, paybill=paybill)
+    except DuplicateShop as exc:
+        label = "paybill" if exc.field == "paybill" else "phone"
+        return f"VeriDuka: That {label} is already on file. Text VERIFY {paybill}."[:160], None
+    return render_register_sms(vendor.name, vendor.paybill), vendor.id
+
+
 @app.post("/api/v1/sms/webhook", response_model=SmsOut)
 async def sms_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await sms_payload(request)
     text = first_value(payload, ("text", "message", "body", "content"))
     sender = first_value(payload, ("from", "msisdn", "phone", "sender"))
     command, argument = parse_sms_command(text)
+    msisdn = normalize_msisdn(sender) or "sandbox"
 
     vendor_id = None
     score_value = None
@@ -767,21 +904,38 @@ async def sms_webhook(request: Request, db: Session = Depends(get_db)):
         reply = HELP_TEXT
     elif command == "UNKNOWN":
         reply = UNKNOWN_TEXT
-    else:
-        matches = [(vendor, field) for vendor, field in search_vendors(db, argument or "") if field in EXACT_FIELDS or field == "name"]
-        exact = [(vendor, field) for vendor, field in matches if field in EXACT_FIELDS]
-        chosen = exact or matches
-        if len(chosen) == 1 or (chosen and chosen[0][1] in EXACT_FIELDS):
-            vendor = chosen[0][0]
-            score = score_vendor(vendor, load_reports(db, vendor.id))
-            reply = render_verify_sms(vendor.name, score["score"], score["band"], legal_state(vendor))
+    elif command == "REGISTER":
+        reply, vendor_id = _register_from_sms(db, argument or "")
+    elif command == "NEXT":
+        cursor = db.query(SmsCursor).filter(SmsCursor.msisdn == msisdn).one_or_none()
+        vendor = db.get(Vendor, cursor.vendor_id) if cursor else None
+        if vendor is None:
+            reply = "VeriDuka: Text COMMENTS and a paybill first. Example: COMMENTS 400200"
+        else:
+            reply = _page_comments(db, msisdn, vendor, restart=False)
+            vendor_id = vendor.id
+    elif command in {"VERIFY", "COMMENTS"}:
+        vendor, problem = _sms_shop(db, argument or "")
+        if vendor is None:
+            reply = problem or UNKNOWN_TEXT
+        elif command == "COMMENTS":
+            reply = _page_comments(db, msisdn, vendor, restart=True)
+            vendor_id = vendor.id
+        else:
+            reports = load_reports(db, vendor.id)
+            score = score_vendor(vendor, reports)
+            reply = render_verify_sms(
+                vendor.name,
+                score["score"],
+                score["band"],
+                legal_state(vendor),
+                has_comments=bool(reading_lines(reports)),
+            )
             vendor_id = vendor.id
             score_value = score["score"]
             band = score["band"]
-        elif len(chosen) > 1:
-            reply = "VeriDuka: Several shops match. Text VERIFY with the paybill or phone."
-        else:
-            reply = render_unknown_sms(argument or "")
+    else:
+        reply = UNKNOWN_TEXT
 
     dispatch = sms_client.dispatch(sender, reply)
     db.add(

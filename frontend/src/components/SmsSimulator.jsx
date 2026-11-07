@@ -3,8 +3,8 @@ import { api } from "../api";
 
 const PRESETS = [
   "VERIFY 400200",
-  "VERIFY @trendyclothez_ke",
-  "VERIFY 0722113344",
+  "COMMENTS 400200",
+  "NEXT",
   "VERIFY 522522",
   "HELP",
 ];
@@ -18,7 +18,7 @@ export default function SmsSimulator() {
     {
       id: messageId++,
       role: "in",
-      text: "Text VERIFY and a paybill, phone, @handle, or KRA PIN.",
+      text: "VERIFY checks a shop. COMMENTS reads reviews one by one. NEXT for the next review. REGISTER Name, 07..., paybill.",
       meta: "ThriveWave sandbox",
     },
   ]);

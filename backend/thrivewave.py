@@ -17,8 +17,12 @@ import uuid
 from dataclasses import dataclass
 
 
-HELP_TEXT = "VeriDuka: Text VERIFY then a paybill, phone, @handle, or KRA PIN. Example: VERIFY 400200"
-UNKNOWN_TEXT = "VeriDuka: Send HELP or VERIFY <paybill|phone|@handle|KRA PIN>."
+HELP_TEXT = (
+    "VeriDuka: VERIFY paybill checks a shop. COMMENTS paybill reads reviews. "
+    "NEXT for the next one. REGISTER Name, 07..., paybill."
+)
+UNKNOWN_TEXT = "VeriDuka: Send HELP, VERIFY 400200, COMMENTS 400200, or NEXT."
+REGISTER_USAGE = "VeriDuka: REGISTER Name, 07..., paybill. Example: REGISTER Kayole Greens, 0711222333, 556677"
 
 
 @dataclass
@@ -99,13 +103,20 @@ def parse_sms_command(text: str) -> tuple[str, str | None]:
         return "EMPTY", None
     if re.fullmatch(r"help", cleaned, re.IGNORECASE):
         return "HELP", None
-    match = re.fullmatch(r"verify\s+(.+)", cleaned, re.IGNORECASE)
-    if match:
-        return "VERIFY", match.group(1).strip()
+    if re.fullmatch(r"next|more", cleaned, re.IGNORECASE):
+        return "NEXT", None
+    for name, pattern in (
+        ("VERIFY", r"verify\s+(.+)"),
+        ("COMMENTS", r"comments\s+(.+)"),
+        ("REGISTER", r"register\s+(.+)"),
+    ):
+        match = re.fullmatch(pattern, cleaned, re.IGNORECASE)
+        if match:
+            return name, match.group(1).strip()
     return "UNKNOWN", cleaned
 
 
-def render_verify_sms(name: str, score: int, band: str, legal_state: str) -> str:
+def render_verify_sms(name: str, score: int, band: str, legal_state: str, has_comments: bool = False) -> str:
     advice = {
         "VERIFIED_SIGNAL": "Safe to pay.",
         "MODERATE_RISK": "Use pay on delivery.",
@@ -120,11 +131,27 @@ def render_verify_sms(name: str, score: int, band: str, legal_state: str) -> str
         "verified": "KRA/BRS match.",
         "pending": "BRS pending.",
     }.get(legal_state, "No KRA/BRS match.")
-    suffix = f". {score}% {label}. {legal_bit} {advice}"
+    extra = " Text COMMENTS." if has_comments else ""
+    suffix = f". {score}% {label}. {legal_bit} {advice}{extra}"
     prefix = "VeriDuka: "
     room = 160 - len(prefix) - len(suffix)
     shown = name if len(name) <= room else (name[: max(0, room - 3)].rstrip() + "...")
     text = f"{prefix}{shown}{suffix}"
+    return text[:160]
+
+
+def render_comment_sms(index: int, total: int, text: str) -> str:
+    """One review, no score and no category. index is 1-based. Stays within 160 characters."""
+    prefix = f"VeriDuka {index}/{total}: "
+    suffix = " Reply NEXT." if index < total else " End."
+    room = 160 - len(prefix) - len(suffix)
+    shown = text if len(text) <= room else text[: max(0, room - 3)].rstrip() + "..."
+    return f"{prefix}{shown}{suffix}"[:160]
+
+
+def render_register_sms(name: str, paybill: str | None) -> str:
+    where = f" Paybill {paybill}." if paybill else ""
+    text = f"VeriDuka: {name} is on file.{where} Score 50%. No KRA/BRS yet. Text VERIFY then the paybill."
     return text[:160]
 
 

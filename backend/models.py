@@ -1,4 +1,9 @@
-"""SQLAlchemy models for shops, buyer reports, the mock registry, and SMS logs."""
+"""SQLAlchemy models for shops, buyer reports, the mock registry, and SMS logs.
+
+The trust score reads Vendor legal status plus Report rows. Instagram, Facebook,
+and TikTok handles are public links for a buyer to open. They are stored here
+so the dossier can point at the live page, and they are not score inputs.
+"""
 
 from datetime import datetime
 
@@ -17,7 +22,10 @@ class Vendor(Base):
     name: Mapped[str] = mapped_column(String(160), index=True)
     phone: Mapped[str | None] = mapped_column(String(20), index=True)
     paybill: Mapped[str | None] = mapped_column(String(20), index=True)
-    instagram: Mapped[str | None] = mapped_column(String(40), index=True)
+    instagram: Mapped[str | None] = mapped_column(String(80), index=True)
+    # Public page handles. The prototype links out. It does not import comments.
+    facebook: Mapped[str | None] = mapped_column(String(80), index=True)
+    tiktok: Mapped[str | None] = mapped_column(String(80), index=True)
     kra_pin: Mapped[str | None] = mapped_column(String(20), index=True)
     brs_number: Mapped[str | None] = mapped_column(String(40), index=True)
     category: Mapped[str] = mapped_column(String(80), default="General")
@@ -100,6 +108,17 @@ class OfficialRecord(Base):
     county: Mapped[str] = mapped_column(String(80))
     entity_type: Mapped[str] = mapped_column(String(40))
     registered_on: Mapped[str] = mapped_column(String(20))
+
+
+class SmsCursor(Base):
+    """Where a feature phone left off while reading reviews. Not a score input."""
+
+    __tablename__ = "sms_cursors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    msisdn: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    vendor_id: Mapped[int] = mapped_column(Integer)
+    position: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class SmsLog(Base):

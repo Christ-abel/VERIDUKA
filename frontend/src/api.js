@@ -34,6 +34,8 @@ async function request(path, options = {}) {
 export const api = {
   search: (query) => request(`/api/v1/search?query=${encodeURIComponent(query)}`),
   vendor: (id) => request(`/api/v1/vendor/${id}`),
+  reading: (id) => request(`/api/v1/vendor/${id}/reading`),
+  register: (body) => request("/api/v1/vendors", { method: "POST", body: JSON.stringify(body) }),
   classify: (body) => request("/api/v1/classify", { method: "POST", body: JSON.stringify(body) }),
   report: (body) => request("/api/v1/reports", { method: "POST", body: JSON.stringify(body) }),
   reply: (reportId, body) => request(`/api/v1/reports/${reportId}/replies`, { method: "POST", body: JSON.stringify(body) }),

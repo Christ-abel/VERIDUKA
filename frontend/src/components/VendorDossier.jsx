@@ -7,7 +7,7 @@ import TrustGauge from "./TrustGauge";
 const TABS = [
   { id: "legal", label: "Legal registration" },
   { id: "reports", label: "Incident reports" },
-  { id: "social", label: "Social comments" },
+  { id: "social", label: "Public pages" },
   { id: "service", label: "Service rating" },
 ];
 
@@ -109,6 +109,9 @@ export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
           Add a report
         </button>
       </div>
+      <p className="mt-3 text-sm text-ink/60">
+        Score inputs are the registry and classified buyer reports. SMS repeats this number. Social pages are links, not inputs.
+      </p>
       <ul className="mt-3 space-y-1 text-sm text-ink/70">
         {detail.notes.map((note) => (
           <li key={note}>{note}</li>
@@ -136,12 +139,14 @@ export default function VendorDossier({ vendor, onBack, onReport, onChanged }) {
         {tab === "legal" && (
           <LegalPanel vendor={vendor} checking={checking} message={legalMessage} onRecheck={recheck} />
         )}
-        {tab === "reports" && <ReportList
+        {tab === "reports" && (
+          <ReportList
             reports={vendor.reports.filter((item) => item.source !== "social")}
             shopName={vendor.name}
             onChanged={onChanged}
-          />}
-        {tab === "social" && <SocialPanel vendor={vendor} onChanged={onChanged} />}
+          />
+        )}
+        {tab === "social" && <SocialPanel vendor={vendor} />}
         {tab === "service" && <ServicePanel rating={detail.service_rating} />}
       </div>
     </article>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import RegisterModal from "./components/RegisterModal";
 import ReportModal from "./components/ReportModal";
 import SearchBar from "./components/SearchBar";
 import SmsSimulator from "./components/SmsSimulator";
@@ -15,6 +16,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [missing, setMissing] = useState("");
   const [reportSeed, setReportSeed] = useState(null);
+  const [registering, setRegistering] = useState(false);
   const explicit = useRef(false);
   const requestId = useRef(0);
 
@@ -109,6 +111,13 @@ export default function App() {
             <p className="hidden text-sm text-[#c5d5c9] sm:block">Zinduathon 3.0</p>
             <button
               type="button"
+              onClick={() => setRegistering(true)}
+              className="rounded-full bg-[#f3ecdf] px-3 py-1.5 text-sm font-semibold text-deep"
+            >
+              Register a shop
+            </button>
+            <button
+              type="button"
               onClick={() => openReport({ vendorId: null, vendorName: "", identifier: query.trim() })}
               className="rounded-full border border-white/20 px-3 py-1.5 text-sm"
             >
@@ -137,7 +146,7 @@ export default function App() {
             loading={searching}
           />
           <p className="mt-4 text-sm text-ink/60">
-            Base 50. Legal match +25. Verified praise +5, up to +20. Scam -20. Delay or poor service -5. Complaints under 30 days count double.
+            Base 50. Legal match +25. Verified praise +5, up to +20. Scam -20. Delay or poor service -5. Complaints under 30 days count double. Instagram, Facebook, and TikTok are links you open yourself.
           </p>
 
           {error && (
@@ -181,6 +190,18 @@ export default function App() {
           <SmsSimulator />
         </div>
       </main>
+
+      {registering && (
+        <RegisterModal
+          onClose={() => setRegistering(false)}
+          onCreated={async (created) => {
+            setRegistering(false);
+            await loadDirectory("");
+            setQuery("");
+            await openVendor(created.id);
+          }}
+        />
+      )}
 
       {reportSeed && (
         <ReportModal

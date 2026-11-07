@@ -1,10 +1,13 @@
-"""Social comment intake.
+"""Optional social comment intake.
 
-Two ways a comment becomes a trust signal:
+The prototype UI does not depend on this module. Shops expose Instagram,
+Facebook, and TikTok as public links, and the buyer reads those reviews on
+the platform. The trust score stays on the registry and on buyer reports.
+
+Two optional paths remain for a later deployment that has credentials:
 
 1. A person pastes comments from a public post and includes the post link.
-   VeriDuka classifies each comment. Nothing moves the score until that link
-   is present, so a random paste cannot silently punish a shop.
+   Nothing moves the score until that link is present.
 
 2. A shop connects its own Instagram professional account through the official
    Meta Graph API. Set META_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID.
@@ -12,10 +15,9 @@ Two ways a comment becomes a trust signal:
    into Instagram, and it does not pull comments from an account that has not
    authorized the app.
 
-WhatsApp has no public comment feed. A buyer pastes the chat, or a shop
-connects its own WhatsApp Business number (Meta WhatsApp Cloud API). Messages
-reach VeriDuka only through that shop's webhook, and only for a number the shop
-has connected. Private chats are never scraped.
+WhatsApp has no public comment feed. A shop can connect its own WhatsApp Business
+number. Messages reach VeriDuka only through that shop's webhook, and only for
+a number the shop has connected. Private chats are never scraped.
 """
 
 from __future__ import annotations

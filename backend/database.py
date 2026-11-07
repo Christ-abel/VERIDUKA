@@ -37,7 +37,15 @@ connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite")
 engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-EXACT_FIELDS = {"paybill", "phone", "instagram", "kra_pin", "brs_number"}
+EXACT_FIELDS = {"paybill", "phone", "instagram", "facebook", "tiktok", "kra_pin", "brs_number"}
+
+# Demo shops keep these handles so the dossier can link to the live page
+# even when the database was created before facebook and tiktok columns existed.
+DEMO_PROFILES = {
+    "Nairobi Tech Hub Electronics": ("nairobitechhub", "NairobiTechHubElectronics", "nairobitechhub"),
+    "Trendy Clothez Kenya": ("trendyclothez_ke", "TrendyClothezKenya", "trendyclothez_ke"),
+    "Mama Boaz Organic Veggies": ("mamaboazveggies", "MamaBoazOrganicVeggies", "mamaboazveggies"),
+}
 KRA_RE = re.compile(r"^[A-Z]\d{9}[A-Z]$")
 BRS_RE = re.compile(r"^(?:PVT|BN|CPR|LLP)[-/A-Z0-9]+$")
 
@@ -72,12 +80,34 @@ def _ensure_report_columns(db: Session) -> None:
 
 
 def _ensure_vendor_columns(db: Session) -> None:
+    """Add public-page and WhatsApp columns on a database created before those fields existed."""
     if not DATABASE_URL.startswith("sqlite"):
         return
-    present = {row[1] for row in db.execute(text("PRAGMA table_info(vendors)")).fetchall()}
-    if "whatsapp_phone_number_id" not in present:
-        db.execute(text("ALTER TABLE vendors ADD COLUMN whatsapp_phone_number_id VARCHAR(40)"))
-        db.commit()
+    rows = db.execute(text("PRAGMA table_info(vendors)")).fetchall()
+    if not rows:
+        return
+    present = {row[1] for row in rows}
+    statements = {
+        "facebook": "ALTER TABLE vendors ADD COLUMN facebook VARCHAR(80)",
+        "tiktok": "ALTER TABLE vendors ADD COLUMN tiktok VARCHAR(80)",
+        "whatsapp_phone_number_id": "ALTER TABLE vendors ADD COLUMN whatsapp_phone_number_id VARCHAR(40)",
+    }
+    for name, statement in statements.items():
+        if name not in present:
+            db.execute(text(statement))
+    db.commit()
+
+
+def _backfill_profiles(db: Session) -> None:
+    """Fill demo handles without overwriting a handle a contributor already set."""
+    for name, (instagram, facebook, tiktok) in DEMO_PROFILES.items():
+        vendor = db.query(Vendor).filter(Vendor.name == name).one_or_none()
+        if vendor is None:
+            continue
+        vendor.instagram = vendor.instagram or instagram
+        vendor.facebook = vendor.facebook or facebook
+        vendor.tiktok = vendor.tiktok or tiktok
+    db.commit()
 
 
 def init_db() -> None:
@@ -90,7 +120,7 @@ def init_db() -> None:
         db.commit()
         if db.query(Vendor).count() == 0:
             seed(db)
-            db.commit()
+        _backfill_profiles(db)
     except Exception:
         db.rollback()
         raise
@@ -161,8 +191,16 @@ def _match_vendor(vendor: Vendor, query: str) -> tuple[int, str] | None:
         return 0, "paybill"
     if phone and phone_tail(vendor.phone) and phone_tail(vendor.phone) == phone[-9:]:
         return 1, "phone"
-    if " " not in query.strip() and vendor.instagram and handle_of(query) == handle_of(vendor.instagram):
-        return 2, "instagram"
+    # A single token can be an Instagram, TikTok, or Facebook handle.
+    # Profile links use these fields. The score does not.
+    if " " not in query.strip():
+        handle = handle_of(query)
+        if vendor.instagram and handle == handle_of(vendor.instagram):
+            return 2, "instagram"
+        if vendor.tiktok and handle == handle_of(vendor.tiktok):
+            return 2, "tiktok"
+        if vendor.facebook and handle == handle_of(vendor.facebook):
+            return 2, "facebook"
     pin = re.sub(r"[^A-Za-z0-9]", "", query).upper()
     if vendor.kra_pin and pin == vendor.kra_pin.upper():
         return 3, "kra_pin"
@@ -189,6 +227,53 @@ def search_vendors(db: Session, query: str) -> list[tuple[Vendor, str]]:
             ranked.append((priority, vendor.name.lower(), vendor, field))
     ranked.sort(key=lambda item: (item[0], item[1]))
     return [(vendor, field) for _, _, vendor, field in ranked]
+
+
+class DuplicateShop(Exception):
+    """The paybill or phone is already on a shop, so registration must not clone it."""
+
+    def __init__(self, field: str):
+        self.field = field
+        super().__init__(field)
+
+
+def create_registered_vendor(
+    db: Session,
+    *,
+    name: str,
+    phone: str,
+    paybill: str | None = None,
+    instagram: str | None = None,
+    facebook: str | None = None,
+    tiktok: str | None = None,
+    category: str = "General",
+    location: str = "Kenya",
+    about: str = "",
+) -> Vendor:
+    """A shop filing itself. Legal status stays unverified until a registry check."""
+    if paybill and db.query(Vendor).filter(Vendor.paybill == paybill).first():
+        raise DuplicateShop("paybill")
+    if phone and db.query(Vendor).filter(Vendor.phone == phone).first():
+        raise DuplicateShop("phone")
+    vendor = Vendor(
+        name=" ".join(name.split())[:160],
+        phone=phone,
+        paybill=paybill,
+        instagram=handle_of(instagram) or None,
+        facebook=(facebook or "").strip().strip("/") or None,
+        tiktok=handle_of(tiktok) or None,
+        category=(category or "General")[:80],
+        location=(location or "Kenya")[:120],
+        about=(" ".join(about.split()) if about else "Registered by the shop. No legal record is linked yet.")[:1000],
+        mpesa_verified=False,
+        kra_status="unverified",
+        brs_status="unverified",
+        is_shadow=False,
+        created_at=utcnow(),
+    )
+    db.add(vendor)
+    db.flush()
+    return vendor
 
 
 def resolve_identifier(db: Session, identifier: str) -> tuple[Vendor, bool]:
@@ -307,6 +392,8 @@ def seed(db: Session) -> None:
         phone=normalize_phone("0712345678"),
         paybill="400200",
         instagram="nairobitechhub",
+        facebook="NairobiTechHubElectronics",
+        tiktok="nairobitechhub",
         kra_pin="P051987654Z",
         brs_number="PVT-9X2K41",
         category="Electronics",
@@ -322,6 +409,8 @@ def seed(db: Session) -> None:
         phone=normalize_phone("0799887766"),
         paybill="987654",
         instagram="trendyclothez_ke",
+        facebook="TrendyClothezKenya",
+        tiktok="trendyclothez_ke",
         category="Fashion",
         location="Instagram and WhatsApp only",
         about="Social only clothing seller. No BRS record under this trading name. Buyers report payment without delivery.",
@@ -333,6 +422,9 @@ def seed(db: Session) -> None:
     mama = Vendor(
         name="Mama Boaz Organic Veggies",
         phone=normalize_phone("0722113344"),
+        instagram="mamaboazveggies",
+        facebook="MamaBoazOrganicVeggies",
+        tiktok="mamaboazveggies",
         kra_pin="A044218903K",
         brs_number="BN-2024-330191",
         category="Fresh produce",

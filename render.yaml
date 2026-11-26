@@ -1,0 +1,29 @@
+# Render Blueprint. The API only. The dashboard is deployed separately on Vercel.
+# In the Render dashboard: New > Blueprint > this repo. Then fill the secret env vars.
+services:
+  - type: web
+    name: veriduka-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APIFY_TOKEN
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: anthropic/claude-haiku-5.5
+      - key: TIKTOK_DAILY_LIMIT
+        value: "60"
+      - key: TIKTOK_HOURLY_PER_CLIENT
+        value: "6"
+      - key: THRIVEWAVE_LIVE
+        value: "false"
+      - key: THRIVEVAS_API_KEY
+        sync: false
+      - key: THRIVEVAS_SENDER_ID
+        value: ThriveVas

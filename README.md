@@ -301,6 +301,17 @@ docker compose up --build
 
 Open http://localhost:8000. The container serves the built dashboard and the API together. The database file is stored at `/data/veriduka.db`.
 
+## Vercel and Render
+
+The page goes on Vercel. The API goes on Render. TikTok lookups call Apify from the API, so `APIFY_TOKEN` belongs on Render, not on Vercel.
+
+1. Render: New, Blueprint, connect `Christ-abel/VERIDUKA`. It reads `render.yaml` and starts the API from `backend`. Paste `APIFY_TOKEN` when it asks. Open `https://<your-service>.onrender.com/health` and wait until it says ok. The first open after a sleep takes about a minute.
+2. Vercel: Import the same repo. Set the root directory to `frontend`. Add `VITE_API_URL` as the Render origin with no trailing slash, for example `https://veriduka-api.onrender.com`. Deploy. Vite bakes that address in at build time, so change it and redeploy if the Render address changes.
+
+Local `npm run dev` leaves `VITE_API_URL` empty and keeps proxying `/api` to port 8000.
+
+A lookup needs `APIFY_TOKEN` from https://console.apify.com/settings/integrations. Without it, Check a TikTok shop says the lookup is not connected. One lookup reads the public profile and a few comments and takes about one to three minutes.
+
 ## TikTok shop lookup
 
 Paste a shop's TikTok link or @handle into Check a TikTok shop on the home page, or call `POST /api/v1/tiktok/lookup` with `{"query": "@shopname"}`. VeriDuka runs two Apify actors (`clockworks/tiktok-profile-scraper`, `clockworks/tiktok-comments-scraper`) and returns the profile (bio, followers, verified, seller flag, link in bio), the latest videos, and a few comments, each run through the same classifier as buyer reports. With `OPENROUTER_API_KEY` set, a model also reviews each comment and writes a one-line read of the shop. It understands Swahili and Sheng, which the rule-based classifier does not, but it is shown beside the classifier's result and never moves the score.

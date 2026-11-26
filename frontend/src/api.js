@@ -1,3 +1,7 @@
+// Empty in local dev, so Vite proxies /api to port 8000.
+// On Vercel set VITE_API_URL to the Render API, with no trailing slash.
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 function errorMessage(data, statusText) {
   const detail = data?.detail;
   if (typeof detail === "string") return detail;
@@ -13,7 +17,7 @@ function errorMessage(data, statusText) {
 async function request(path, options = {}) {
   let response;
   try {
-    response = await fetch(path, {
+    response = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
